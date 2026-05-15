@@ -12,21 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     fontconfig \
     perl \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
     wget \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
-
-RUN wget -qO- "https://yihui.org/tinytex/install-bin-unix.sh" | sh
-ENV PATH="/root/.TinyTeX/bin/x86_64-linux:${PATH}"
-RUN tlmgr update --self && tlmgr install \
-    geometry \
-    fancyhdr \
-    enumitem \
-    lm \
-    tools \
-    parskip \
-    helvetic \
-    microtype
 
 FROM node:20-bookworm-slim AS ui-build
 WORKDIR /ui-app
@@ -44,6 +36,7 @@ COPY agents/ ./agents/
 COPY templates/ ./templates/
 COPY server.py .
 COPY --from=ui-build /ui-app/out ./ui-app/out
+COPY --from=ui-build /ui-app/public/schemas ./ui-app/public/schemas
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && mkdir -p /app/output_confirmations/temp
 
