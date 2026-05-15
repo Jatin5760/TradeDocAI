@@ -1,0 +1,68 @@
+# ============================================================
+# TradeDoc AI — .gitignore
+# ============================================================
+
+# ── Secrets ─────────────────────────────────────────────────
+.env
+!.env.example
+
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# ── Virtual environments ─────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Node.js ──────────────────────────────────────────────────
+ui-app/node_modules/
+ui-app/.next/
+ui-app/out/
+
+# ── IDE / Editor ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Generated PDFs ───────────────────────────────────────────
+output_confirmations/
+templates/FX_Trade_Confirmation/output confirmations/
+templates/IRS_Confirmation/output_confirmations/
+
+# ── LaTeX auxiliary files ────────────────────────────────────
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+
+# ── Large archive / image files ──────────────────────────────
+*.tar
+*.zip
+*.gz
+*.tgz
+*.dockerimage
+.dockerimage
+
+# ── Gemini AI tool data ──────────────────────────────────────
+.gemini/
+
+# ── Windows-specific ────────────────────────────────────────
+miktexpackages.txt
+
+
+test cases/

@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Primary Colors */
+    --primary-background: #1814f3;
+    --primary-foreground: #ffffff;
+    --primary-light: #e7edff;
+    
+    /* Secondary Colors */
+    --secondary-background: #ffffff;
+    --secondary-foreground: #343c6a;
+    
+    /* Accent Colors */
+    --accent-success: #41d4a8;
+    --accent-success-light: #dcfaf8;
+    --accent-error: #ff4b4a;
+    --accent-error-light: #ffe0eb;
+    --accent-warning: #fff5d9;
+    
+    /* Text Colors */
+    --text-primary: #232323;
+    --text-secondary: #343c6a;
+    --text-tertiary: #718ebf;
+    --text-muted: #8ba3cb;
+    --text-disabled: #b1b1b1;
+    --text-link: #333b69;
+    --text-inverse: #ffffff;
+    --text-transparent: #ffffffb2;
+    
+    /* Background Colors */
+    --bg-main: #f4f6f9;
+    --bg-card: #ffffff;
+    --bg-input: #ffffff;
+    --bg-search: #f4f6f9;
+    --bg-sidebar: #ffffff;
+    --bg-hover: #edf1f7;
+    --bg-light: #e6eff5;
+    --bg-lighter: #e5eef4;
+    
+    /* Border Colors */
+    --border-primary: #dfeaf2;
+    --border-secondary: #deeaf2;
+    --border-light: #e6eff5;
+    
+    /* Component-Specific Colors */
+    --header-bg: #ffffff;
+    --sidebar-bg: #ffffff;
+    --button-primary-bg: #1814f3;
+    --button-primary-text: #ffffff;
+    --card-bg: #ffffff;
+    --icon-success-bg: #dcfaf8;
+    --icon-primary-bg: #e7edff;
+    --icon-error-bg: #ffe0eb;
+    --icon-warning-bg: #fff5d9;
+    
+    /* Typography Variables - Font Sizes */
+    --font-size-xs: 12px;
+    --font-size-sm: 15px;
+    --font-size-base: 16px;
+    --font-size-md: 17px;
+    --font-size-lg: 18px;
+    --font-size-xl: 20px;
+    --font-size-2xl: 22px;
+    --font-size-3xl: 28px;
+    
+    /* Typography Variables - Font Weights */
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    
+    /* Typography Variables - Line Heights */
+    --line-height-xs: 15px;
+    --line-height-sm: 18px;
+    --line-height-base: 19px;
+    --line-height-md: 20px;
+    --line-height-lg: 21px;
+    --line-height-xl: 22px;
+    --line-height-2xl: 24px;
+    --line-height-3xl: 27px;
+    --line-height-4xl: 28px;
+    --line-height-5xl: 34px;
+    
+    /* Spacing Variables - Margin */
+    --margin-xs: 4px;
+    --margin-sm: 6px;
+    --margin-md: 8px;
+    --margin-lg: 10px;
+    --margin-xl: 12px;
+    --margin-2xl: 14px;
+    --margin-3xl: 16px;
+    --margin-4xl: 18px;
+    --margin-5xl: 20px;
+    --margin-6xl: 22px;
+    --margin-7xl: 24px;
+    --margin-8xl: 26px;
+    --margin-9xl: 28px;
+    --margin-10xl: 30px;
+    --margin-11xl: 32px;
+    --margin-12xl: 36px;
+    --margin-13xl: 40px;
+    --margin-14xl: 42px;
+    --margin-15xl: 46px;
+    --margin-16xl: 48px;
+    --margin-17xl: 62px;
+    --margin-18xl: 66px;
+    --margin-19xl: 156px;
+    
+    /* Spacing Variables - Padding */
+    --padding-sm: 6px;
+    --padding-md: 10px;
+    --padding-lg: 12px;
+    --padding-xl: 14px;
+    --padding-2xl: 16px;
+    --padding-3xl: 18px;
+    --padding-4xl: 20px;
+    --padding-5xl: 22px;
+    --padding-6xl: 24px;
+    --padding-7xl: 26px;
+    --padding-8xl: 30px;
+    --padding-9xl: 34px;
+    --padding-10xl: 40px;
+    --padding-11xl: 50px;
+    --padding-12xl: 56px;
+    
+    /* Spacing Variables - Gap */
+    --gap-xs: 2px;
+    --gap-sm: 4px;
+    --gap-md: 6px;
+    --gap-lg: 8px;
+    --gap-xl: 10px;
+    --gap-2xl: 12px;
+    --gap-3xl: 14px;
+    --gap-4xl: 16px;
+    --gap-5xl: 18px;
+    --gap-6xl: 20px;
+    --gap-7xl: 22px;
+    --gap-8xl: 24px;
+    --gap-9xl: 26px;
+    --gap-10xl: 28px;
+    --gap-11xl: 30px;
+    --gap-12xl: 32px;
+    
+    /* Border Radius Variables */
+    --radius-none: 0px;
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --radius-xl: 24px;
+    --radius-2xl: 26px;
+    --radius-3xl: 30px;
+    --radius-4xl: 34px;
+    
+    /* Border Width Variables */
+    --border-width-default: 1px;
+    
+    /* Layout Variables - Width */
+    --width-icon-sm: 24px;
+    --width-icon-md: 26px;
+    --width-icon-lg: 34px;
+    --width-avatar: 60px;
+    --width-profile: 70px;
+    --width-logo: 182px;
+    --width-card: 350px;
+    --width-container: 1352px;
+  }
+}
+
+/* Custom Utility Classes */
+@layer utilities {
+  .text-gradient-primary {
+    background: linear-gradient(135deg, var(--primary-background) 0%, #5a4ad4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  .shadow-card {
+    box-shadow: 0px 4px 18px 0px rgba(231, 237, 255, 0.4);
+  }
+  
+  .shadow-button {
+    box-shadow: 0px 2px 8px 0px rgba(24, 20, 243, 0.24);
+  }
+  
+  .transition-smooth {
+    transition: all 0.3s ease-in-out;
+  }
+}

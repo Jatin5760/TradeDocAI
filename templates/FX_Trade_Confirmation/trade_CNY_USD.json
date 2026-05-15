@@ -1,0 +1,57 @@
+{
+    "reference_currency": "CNY",
+    "settlement_currency": "USD",
+
+    "trade_date": "03 March 2026",
+    "reference_currency_full": "Chinese Renminbi (CNY)",
+    "notional_amount": "USD 20,000,000",
+    "forward_rate": "7.28",
+    "reference_currency_notional_amount": "CNY 145,600,000",
+    "buyer": "Deutsche Bank AG",
+    "seller": "Bank of China Limited",
+    "settlement_currency_full": "U.S. Dollars",
+    "settlement_date": "05 September 2026, subject to adjustment if the Scheduled Valuation Date is adjusted in accordance with the Following Business Day Convention or if Valuation Postponement applies, and in each such case, the Settlement Date shall be as soon as practicable, but in no event later than two Business Days after the date on which the Spot Rate is determined.",
+    "settlement_type": "Non-Deliverable",
+    "settlement_rate_option": "CNY SAEC (CNY01)",
+    "valuation_date": "03 September 2026 (``Scheduled Valuation Date''), subject to adjustment in accordance with the Preceding Business Day Convention; provided however that, in the event of an Unscheduled Holiday, subject to adjustment in accordance with the Following Business Day Convention.",
+
+    "price_source_disruption": "Applicable",
+
+    "disruption_fallbacks": [
+        "Valuation Postponement",
+        "Calculation Agent Determination of Settlement Rate"
+    ],
+
+    "other_terms": [
+        {
+            "title": "Unscheduled Holiday",
+            "description": "``Unscheduled Holiday'' means that a day is not a Business Day and the market was not aware of such fact (by means of a public announcement or by reference to other publicly available information) until a time later than 9:00 a.m.\\ local time in the Principal Financial Center(s) of the Reference Currency two Business Days prior to the Scheduled Valuation Date."
+        },
+        {
+            "title": "Deferral Period for Unscheduled Holiday",
+            "description": "In the event the Scheduled Valuation Date becomes subject to the Following Business Day Convention after the occurrence of an Unscheduled Holiday, and if the Valuation Date has not occurred on or before the 14th consecutive day after the Scheduled Valuation Date (any such period being a ``Deferral Period''), then the next day after the Deferral Period that would have been a Business Day, but for the Unscheduled Holiday, shall be deemed to be the Valuation Date."
+        },
+        {
+            "title": "Valuation Postponement for Price Source Disruption",
+            "description": "``Valuation Postponement'' means, for purposes of obtaining a Settlement Rate, that the Spot Rate will be determined on the Business Day first succeeding the day on which the Price Source Disruption ceases to exist, unless the Price Source Disruption continues to exist for a consecutive number of calendar days equal to the Maximum Days of Postponement. In such event, the Spot Rate will be determined on the next Business Day after the Maximum Days of Postponement in accordance with the next applicable Disruption Fallback."
+        },
+        {
+            "title": "Cumulative Events",
+            "description": "Notwithstanding anything herein to the contrary, in no event shall the total number of consecutive calendar days during which either (i) valuation is deferred due to an Unscheduled Holiday, or (ii) a Valuation Postponement shall occur (or any combination of (i) and (ii)), exceed 14 consecutive calendar days in the aggregate."
+        },
+        {
+            "title": "Maximum Days of Postponement",
+            "description": "Fourteen (14) calendar days"
+        },
+        {
+            "title": "Relevant Cities for Business Day(s) for Valuation Date",
+            "description": "Beijing or Shanghai \\underline{and} New York City"
+        },
+        {
+            "title": "Relevant City for Business Day for Settlement Date",
+            "description": "New York"
+        }
+    ],
+
+    "calculation_agent": "Deutsche Bank AG"
+}

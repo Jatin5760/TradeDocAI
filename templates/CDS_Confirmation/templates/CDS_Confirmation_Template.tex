@@ -1,0 +1,317 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{fancyhdr}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\cfoot{\thepage}
+
+\begin{document}
+
+% ======================================================================
+% OPENING (ALWAYS PRESENT)
+% ======================================================================
+
+\begin{center}
+    \textbf{<< party_a_name >>}
+\end{center}
+\vspace{0.3cm}
+
+\begin{flushright}
+    << confirmation_date >>
+\end{flushright}
+
+\vspace{0.3cm}
+\noindent \textbf{<< party_b_name >>} \\
+\noindent << party_b_attn >> \\
+\noindent << party_b_address >>
+
+\vspace{0.5cm}
+\noindent \textbf{Re: << transaction_title >>}
+
+\vspace{0.3cm}
+\noindent Dear Sir/Madam,
+
+\vspace{0.3cm}
+\noindent The purpose of this letter (this ``Confirmation'') is to confirm the terms and conditions of the Credit Derivative Transaction entered into between us on the Trade Date specified below (the ``Transaction'').
+
+\vspace{0.3cm}
+\noindent The definitions and provisions contained in the 2014 ISDA Credit Derivatives Definitions (the ``2014 Definitions''), as published by the International Swaps and Derivatives Association, Inc. (``ISDA\textsuperscript{\textregistered}''), are incorporated into this Confirmation. In the event of any inconsistency between the 2014 Definitions and this Confirmation, this Confirmation will govern.
+
+\vspace{0.3cm}
+\noindent This Confirmation constitutes a ``Confirmation'' as referred to in, and supplements, forms part of and is subject to, the ISDA Master Agreement dated as of \textbf{<< isda_agreement_date >>}, as amended and supplemented from time to time (the ``Agreement''), between \textbf{<< party_a_name >>} (``Party A'') and \textbf{<< party_b_name >>} (``Party B''). All provisions contained in the Agreement govern this Confirmation except as expressly modified below.
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+\noindent The terms of the Transaction to which this Confirmation relates are as follows:
+
+\vspace{0.3cm}
+
+% ======================================================================
+% SECTION 1 - GENERAL TERMS
+% ======================================================================
+
+\noindent \textbf{1.\quad General Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Transaction Type:} << transaction_type >>
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Scheduled Termination Date:} << scheduled_termination_date >>
+    \item \textbf{Floating Rate Payer (Protection Buyer):} Party A (<< party_a_name >>)
+    \item \textbf{Fixed Rate Payer (Protection Seller):} Party B (<< party_b_name >>)
+<<- if party_a_lei >>
+    \item \textbf{Party A LEI:} << party_a_lei >>
+<<- endif >>
+<<- if party_b_lei >>
+    \item \textbf{Party B LEI:} << party_b_lei >>
+<<- endif >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+    \item \textbf{Reference Entity:} << reference_entity >>
+<<- if reference_entity_lei >>
+    \item \textbf{Reference Entity LEI:} << reference_entity_lei >>
+<<- endif >>
+    \item \textbf{Reference Obligation:} << reference_obligation >>
+<<- if reference_obligation_cusip >>
+    \item \textbf{Reference Obligation CUSIP/ISIN:} << reference_obligation_cusip >>
+<<- endif >>
+    \item \textbf{Seniority Level:} << seniority_level >>
+<<- if standard_reference_obligation >>
+    \item \textbf{Standard Reference Obligation:} << standard_reference_obligation >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+% ======================================================================
+% SECTION 2 - FIXED PAYMENTS (PREMIUM LEG)
+% ======================================================================
+
+\noindent \textbf{2.\quad Fixed Payments:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Fixed Rate Payer:} Party B (<< party_b_name >>)
+    \item \textbf{Floating Rate Payer Calculation Amount:} << notional_amount >>
+    \item \textbf{Fixed Rate:} << fixed_rate >> basis points per annum
+    \item \textbf{Fixed Rate Day Count Fraction:} << fixed_day_count >>
+    \item \textbf{Fixed Rate Payer Payment Dates:} << fixed_payment_dates >>
+    \item \textbf{Business Day Convention:} << business_day_convention >>
+<<- if business_day_centers >>
+    \item \textbf{Business Day Centers:} << business_day_centers >>
+<<- endif >>
+<<- if initial_payment_payer >>
+    \item \textbf{Initial Payment Payer:} << initial_payment_payer >>
+<<- endif >>
+<<- if initial_payment_amount >>
+    \item \textbf{Initial Payment Amount:} << initial_payment_amount >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+% ======================================================================
+% SECTION 3 - FLOATING PAYMENT (PROTECTION LEG)
+% ======================================================================
+
+\noindent \textbf{3.\quad Floating Payment:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Floating Rate Payer:} Party A (<< party_a_name >>)
+    \item \textbf{Floating Rate Payer Calculation Amount:} << notional_amount >>
+    \item \textbf{Conditions to Payment:} Credit Event Notice, Notice of Publicly Available Information
+    \item \textbf{Credit Event Notice After Restructuring:} << credit_event_notice_after_restructuring >>
+\end{itemize}
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+% ======================================================================
+% SECTION 4 - CREDIT EVENTS
+% ======================================================================
+
+\noindent \textbf{4.\quad Credit Events:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Bankruptcy:} Applicable
+    \item \textbf{Failure to Pay:} Applicable
+<<- if grace_period_extension >>
+    \item \textbf{Grace Period Extension:} << grace_period_extension >>
+<<- endif >>
+    \item \textbf{Payment Requirement:} << payment_requirement >>
+<<- if obligation_acceleration >>
+    \item \textbf{Obligation Acceleration:} << obligation_acceleration >>
+<<- endif >>
+<<- if obligation_default >>
+    \item \textbf{Obligation Default:} << obligation_default >>
+<<- endif >>
+<<- if repudiation_moratorium >>
+    \item \textbf{Repudiation/Moratorium:} << repudiation_moratorium >>
+<<- endif >>
+    \item \textbf{Restructuring:} << restructuring >>
+<<- if restructuring_maturity_limitation >>
+    \item \textbf{Restructuring Maturity Limitation:} << restructuring_maturity_limitation >>
+<<- endif >>
+<<- if governmental_intervention >>
+    \item \textbf{Governmental Intervention:} << governmental_intervention >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+% ======================================================================
+% SECTION 5 - SETTLEMENT TERMS
+% ======================================================================
+
+\noindent \textbf{5.\quad Settlement Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Settlement Method:} << settlement_method >>
+<<- if settlement_method == 'Cash Settlement' >>
+    \item \textbf{Valuation Method:} << valuation_method >>
+    \item \textbf{Valuation Date:} << valuation_date >>
+    \item \textbf{Valuation Time:} << valuation_time >>
+    \item \textbf{Quotation Method:} << quotation_method >>
+    \item \textbf{Quotation Amount:} << quotation_amount >>
+    \item \textbf{Minimum Quotation Amount:} << minimum_quotation_amount >>
+    \item \textbf{Dealers:} << dealers >>
+<<- elif settlement_method == 'Physical Settlement' >>
+    \item \textbf{Physical Settlement Period:} << physical_settlement_period >>
+    \item \textbf{Deliverable Obligation Category:} << deliverable_obligation_category >>
+<<- if deliverable_obligation_characteristics >>
+    \item \textbf{Deliverable Obligation Characteristics:} << deliverable_obligation_characteristics >>
+<<- endif >>
+    \item \textbf{Escrow:} << escrow >>
+<<- endif >>
+    \item \textbf{Reference Price:} << reference_price >>
+\end{itemize>
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+% ======================================================================
+% OPTIONAL - ADDITIONAL PROVISIONS
+% ======================================================================
+
+<<- if additional_provisions >>
+\noindent \textbf{6.\quad Additional Provisions:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if fixed_recovery_applicable >>
+    \item \textbf{Additional Provisions for Fixed Recovery CDS Transactions:} Applicable
+    \item \textbf{Final Price:} << fixed_recovery_final_price >>
+<<- endif >>
+<<- if recovery_lock_applicable >>
+    \item \textbf{Additional Provisions for Recovery Lock Credit Derivative Transactions:} Applicable
+    \item \textbf{Reference Price:} << recovery_lock_reference_price >>
+<<- endif >>
+<<- if monoline_applicable >>
+    \item \textbf{Additional Provisions for Monoline Insurer Reference Entities:} Applicable
+<<- endif >>
+\end{itemize}
+\vspace{0.3cm}
+\hrule
+\vspace{0.5cm}
+<<- endif >>
+
+% ======================================================================
+% OPTIONAL - CUSTOM CLAUSES
+% ======================================================================
+
+<<- if custom_clauses >>
+\noindent \textbf{Additional Terms:}
+\vspace{0.2cm}
+
+<<- for clause in custom_clauses >>
+\noindent \textbf{<< clause.title >>:} << clause.description >>
+
+\vspace{0.2cm}
+<<- endfor >>
+\vspace{0.3cm}
+\hrule
+\vspace{0.5cm}
+<<- endif >>
+
+% ======================================================================
+% OPTIONAL - LOGISTICS
+% ======================================================================
+
+<<- if party_a_accounts or party_b_accounts >>
+\noindent \textbf{Notice and Account Details:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_accounts >>
+    \item Account(s) for payments to Party A: << party_a_accounts >>
+<<- endif >>
+<<- if party_b_accounts >>
+    \item Account(s) for payments to Party B: << party_b_accounts >>
+<<- endif >>
+\end{itemize}
+\vspace{0.3cm}
+<<- endif >>
+
+<<- if party_a_office or party_b_office >>
+\noindent \textbf{Offices:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_office >>
+    \item Seller: << party_a_office >>
+<<- endif >>
+<<- if party_b_office >>
+    \item Buyer: << party_b_office >>
+<<- endif >>
+\end{itemize}
+\vspace{0.3cm}
+<<- endif >>
+
+<<- if party_a_notice_details or party_b_notice_details >>
+\noindent \textbf{Contact Details for Notice:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_notice_details >>
+    \item Party A: << party_a_notice_details >>
+<<- endif >>
+<<- if party_b_notice_details >>
+    \item Party B: << party_b_notice_details >>
+<<- endif >>
+\end{itemize>
+\vspace{0.3cm}
+<<- endif >>
+
+<<- if broker_arranger_details >>
+\noindent \textbf{Broker / Arranger:} << broker_arranger_details >>
+\vspace{0.3cm}
+<<- endif >>
+
+\vspace{1cm}
+
+% ======================================================================
+% CLOSING AND SIGNATURES (ALWAYS PRESENT)
+% ======================================================================
+
+\noindent Please confirm your agreement to be bound by the terms of the foregoing by executing a copy of this Confirmation and returning it to us.
+
+\vspace{2cm}
+
+\noindent
+\begin{tabular}{@{}p{0.46\linewidth} p{0.06\linewidth} p{0.46\linewidth}@{}}
+Yours sincerely, & & Confirmed as of the date first above written: \\[0.8cm]
+\textbf{<< party_a_name >>} & & \textbf{<< party_b_name >>} \\[0.8cm]
+By: \makebox[2in]{\hrulefill} & & By: \makebox[2in]{\hrulefill} \\[0.5cm]
+Name: \makebox[2in]{\hrulefill} & & Name: \makebox[2in]{\hrulefill} \\[0.5cm]
+Title: \textbf{<< party_a_signatory_title >>} & & Title: \textbf{<< party_b_signatory_title >>} \\[0.5cm]
+Date: \makebox[2in]{\hrulefill} & & Date: \makebox[2in]{\hrulefill} \\
+\end{tabular}
+
+\end{document}

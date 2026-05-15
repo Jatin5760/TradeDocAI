@@ -1,0 +1,284 @@
+{
+  "id": "irs",
+  "name": "IRS Confirmation",
+  "description": "Interest Rate Derivatives Confirmation",
+  "icon": "📊",
+  "steps": [
+    {
+      "id": "exhibit_selection",
+      "title": "Select Document Type",
+      "type": "selection",
+      "field": {
+        "key": "exhibit",
+        "label": "Which Exhibit do you need?",
+        "type": "select",
+        "required": true,
+        "options": [
+          { "value": "II-A", "label": "Exhibit II-A — Interest Rate Swap (IRS)", "subtitle": "Fixed vs Floating, e.g. Goldman pays 3.75% fixed, JPMorgan pays SOFR + spread" },
+          { "value": "II-B", "label": "Exhibit II-B — Interest Rate Cap / Floor / Collar", "subtitle": "e.g. Deutsche Bank buys a Cap at 4.50% on EURIBOR" },
+          { "value": "II-C", "label": "Exhibit II-C — Forward Rate Agreement (FRA)", "subtitle": "Lock in a rate today for a future period" },
+          { "value": "II-D", "label": "Exhibit II-D — Overnight Index Swap (OIS)", "subtitle": "Fixed vs SOFR compounded overnight rate swap" },
+          { "value": "II-E", "label": "Exhibit II-E — Swaption", "subtitle": "Option to enter into an IRS in the future" },
+          { "value": "II-H", "label": "Exhibit II-H — Mark-to-Market Currency Swap", "subtitle": "Cross currency swap with periodic revaluation" },
+          { "value": "II-I", "label": "Exhibit II-I — Range Accrual Swap", "subtitle": "Payments only accrue when rate stays in range" },
+          { "value": "II-J", "label": "Exhibit II-J — Floating to Floating Swap", "subtitle": "SOFR vs EURIBOR basis swap" }
+        ]
+      }
+    },
+    {
+      "id": "closing_clause",
+      "title": "Closing Clause",
+      "type": "selection",
+      "field": {
+        "key": "termination_type",
+        "label": "Do you need a closing clause?",
+        "type": "select",
+        "required": true,
+        "options": [
+          { "value": "", "label": "None", "subtitle": "No early termination clause" },
+          { "value": "Optional", "label": "Optional Early Termination (Exhibit II-F)", "subtitle": "Either party can terminate early on agreed dates" },
+          { "value": "Mandatory", "label": "Mandatory Early Termination (Exhibit II-G)", "subtitle": "Trade MUST terminate on a specific date" }
+        ]
+      }
+    }
+  ],
+  "sections": {
+    "exhibit_i": {
+      "title": "Exhibit I — Party & Agreement Details",
+      "always_show": true,
+      "fields": [
+        { "key": "party_a_name", "label": "Party A Name", "type": "text", "required": true, "placeholder": "e.g. Goldman Sachs International" },
+        { "key": "party_a_lei", "label": "Party A LEI", "type": "text", "required": false, "placeholder": "e.g. W22LROWP2IHZNBB6K528" },
+        { "key": "party_a_attn", "label": "Party A Attention", "type": "text", "required": false, "placeholder": "e.g. Derivatives Documentation" },
+        { "key": "party_a_address", "label": "Party A Address", "type": "text", "required": false, "placeholder": "e.g. 133 Fleet Street, London EC4A 2BB" },
+        { "key": "party_b_name", "label": "Party B Name", "type": "text", "required": true, "placeholder": "e.g. JP Morgan Chase Bank N.A." },
+        { "key": "party_b_lei", "label": "Party B LEI", "type": "text", "required": false, "placeholder": "e.g. 7H6GLXDRUGQFU57RNE97" },
+        { "key": "party_b_attn", "label": "Party B Attention", "type": "text", "required": false, "placeholder": "e.g. Attn: Derivatives Documentation" },
+        { "key": "party_b_address", "label": "Party B Address", "type": "text", "required": false, "placeholder": "e.g. 383 Madison Avenue, New York, NY 10017" },
+        { "key": "confirmation_date", "label": "Confirmation Date", "type": "text", "required": true, "placeholder": "e.g. 01 March 2026" },
+        { "key": "transaction_title", "label": "Transaction Title", "type": "text", "required": true, "placeholder": "e.g. Interest Rate Swap Transaction" },
+        { "key": "isda_agreement_date", "label": "ISDA Agreement Date", "type": "text", "required": true, "placeholder": "e.g. 15 January 2020" }
+      ]
+    },
+    "common_general": {
+      "title": "General Terms",
+      "show_for_exhibits": ["II-A", "II-B", "II-C", "II-D", "II-E", "II-H", "II-I", "II-J"],
+      "fields": [
+        { "key": "notional_amount", "label": "Notional Amount", "type": "text", "required": false, "placeholder": "e.g. USD 50,000,000" },
+        { "key": "trade_date", "label": "Trade Date", "type": "text", "required": true, "placeholder": "e.g. 01 March 2026" },
+        { "key": "effective_date", "label": "Effective Date", "type": "text", "required": true, "placeholder": "e.g. 03 March 2026" },
+        { "key": "termination_date", "label": "Termination Date", "type": "text", "required": true, "placeholder": "e.g. 03 March 2031" },
+        { "key": "holiday_adjustment", "label": "Unscheduled Holiday Adjustment", "type": "select", "required": false, "options": ["", "Applicable", "Not Applicable"] },
+        { "key": "calculation_agent", "label": "Calculation Agent", "type": "text", "required": false, "placeholder": "e.g. Party A" },
+        { "key": "notification_deadline", "label": "Notification Deadline", "type": "text", "required": false, "placeholder": "" }
+      ]
+    },
+    "exhibit_ii_a": {
+      "title": "Exhibit II-A — Fixed & Floating Amounts",
+      "show_for_exhibits": ["II-A"],
+      "subsections": [
+        {
+          "title": "Fixed Amounts",
+          "fields": [
+            { "key": "fixed_currency_amount", "label": "Fixed Amount Payer Currency Amount", "type": "text", "required": false, "placeholder": "" },
+            { "key": "fixed_payment_dates", "label": "Fixed Amount Payer Payment Dates", "type": "textarea", "required": true, "placeholder": "e.g. 3rd day of March and September each year..." },
+            { "key": "fixed_delayed_payment", "label": "Delayed Payment / Early Payment", "type": "text", "required": false, "placeholder": "" },
+            { "key": "fixed_rate_or_amount", "label": "Fixed Rate", "type": "text", "required": true, "placeholder": "e.g. 3.75\\% per annum" },
+            { "key": "fixed_day_count", "label": "Fixed Rate Day Count Fraction", "type": "select", "required": true, "options": ["30/360", "Actual/360", "Actual/365", "Actual/Actual"] },
+            { "key": "fixed_negative_rate_method", "label": "Negative Interest Rate Method", "type": "text", "required": false, "placeholder": "" },
+            { "key": "fixed_compounding", "label": "Compounding", "type": "select", "required": false, "options": ["", "Applicable", "Inapplicable"] }
+          ]
+        },
+        {
+          "title": "Floating Amounts",
+          "fields": [
+            { "key": "floating_currency_amount", "label": "Floating Amount Payer Currency Amount", "type": "text", "required": false, "placeholder": "" },
+            { "key": "floating_payment_dates", "label": "Floating Amount Payer Payment Dates", "type": "textarea", "required": true, "placeholder": "e.g. 3rd day of each quarter..." },
+            { "key": "floating_rate_option", "label": "Floating Rate Option", "type": "text", "required": true, "placeholder": "e.g. USD-SOFR-COMPOUND" },
+            { "key": "designated_maturity", "label": "Designated Maturity", "type": "text", "required": true, "placeholder": "e.g. 3 Months" },
+            { "key": "spread", "label": "Spread", "type": "text", "required": true, "placeholder": "e.g. 0.25\\% per annum" },
+            { "key": "floating_day_count", "label": "Floating Rate Day Count Fraction", "type": "select", "required": true, "options": ["Actual/360", "30/360", "Actual/365", "Actual/Actual"] },
+            { "key": "reset_dates", "label": "Reset Dates", "type": "text", "required": true, "placeholder": "e.g. First day of each Calculation Period" },
+            { "key": "floating_averaging", "label": "Method of Averaging", "type": "text", "required": false, "placeholder": "" },
+            { "key": "discounting", "label": "Discounting", "type": "text", "required": false, "placeholder": "" }
+          ]
+        }
+      ]
+    },
+    "exhibit_ii_b": {
+      "title": "Exhibit II-B — Cap / Floor / Collar Terms",
+      "show_for_exhibits": ["II-B"],
+      "fields": [
+        { "key": "cap_floor_collar_type", "label": "Transaction Type", "type": "select", "required": true, "options": ["Cap", "Floor", "Collar"] },
+        { "key": "cap_floor_rate", "label": "Cap / Floor Rate", "type": "text", "required": true, "placeholder": "e.g. 4.50% per annum" },
+        { "key": "cap_floating_payer", "label": "Floating Amount Payer", "type": "text", "required": true, "placeholder": "e.g. Party A (Deutsche Bank AG)" },
+        { "key": "cap_floating_rate_option", "label": "Floating Rate Option", "type": "text", "required": true, "placeholder": "e.g. EUR-EURIBOR-Reuters" },
+        { "key": "cap_day_count", "label": "Floating Rate Day Count Fraction", "type": "select", "required": true, "options": ["Actual/360", "30/360", "Actual/365", "Actual/Actual"] },
+        { "key": "cap_payment_dates", "label": "Payment Dates", "type": "textarea", "required": true, "placeholder": "e.g. 12th day of each quarter..." },
+        { "key": "collar_fixed_payer", "label": "Fixed Amount Payer (Collar only)", "type": "text", "required": false, "placeholder": "Only for Collar transactions", "show_when": { "field": "cap_floor_collar_type", "value": "Collar" } },
+        { "key": "floor_rate", "label": "Floor Rate (Collar only)", "type": "text", "required": false, "placeholder": "e.g. 2.00% per annum", "show_when": { "field": "cap_floor_collar_type", "value": "Collar" } }
+      ]
+    },
+    "exhibit_ii_c": {
+      "title": "Exhibit II-C — Forward Rate Agreement Terms",
+      "show_for_exhibits": ["II-C"],
+      "fields": [
+        { "key": "fra_payment_date", "label": "Payment Date", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fra_fixed_payer", "label": "Fixed Amount Payer", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fra_fixed_rate", "label": "Fixed Rate", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fra_floating_payer", "label": "Floating Amount Payer", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fra_floating_rate_option", "label": "Floating Rate Option", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fra_designated_maturity", "label": "Designated Maturity", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fra_day_count", "label": "Day Count Fraction", "type": "select", "required": true, "options": ["Actual/360", "30/360", "Actual/365", "Actual/Actual"] },
+        { "key": "fra_discounting", "label": "FRA Discounting", "type": "select", "required": true, "options": ["Applicable", "Not Applicable"] }
+      ]
+    },
+    "exhibit_ii_d": {
+      "title": "Exhibit II-D — OIS Terms",
+      "show_for_exhibits": ["II-D"],
+      "fields": [
+        { "key": "fixed_rate_or_amount", "label": "Fixed Rate", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fixed_day_count", "label": "Fixed Rate Day Count Fraction", "type": "select", "required": true, "options": ["Actual/360", "30/360", "Actual/365", "Actual/Actual"] },
+        { "key": "ois_floating_rate_option", "label": "Floating Rate Option", "type": "text", "required": true, "placeholder": "e.g. USD-Federal Funds-H.15-OIS-COMPOUND" },
+        { "key": "ois_payment_dates", "label": "Payment Dates", "type": "textarea", "required": true, "placeholder": "" },
+        { "key": "ois_delayed_payment", "label": "Delayed Payment", "type": "text", "required": false, "placeholder": "" }
+      ]
+    },
+    "exhibit_ii_e": {
+      "title": "Exhibit II-E — Swaption Terms",
+      "show_for_exhibits": ["II-E"],
+      "subsections": [
+        {
+          "title": "Option Terms",
+          "fields": [
+            { "key": "option_style", "label": "Option Style", "type": "select", "required": true, "options": ["European", "American", "Bermudan"] },
+            { "key": "swaption_seller", "label": "Seller", "type": "text", "required": true, "placeholder": "" },
+            { "key": "swaption_buyer", "label": "Buyer", "type": "text", "required": true, "placeholder": "" },
+            { "key": "swaption_premium", "label": "Premium", "type": "text", "required": true, "placeholder": "" },
+            { "key": "swaption_premium_date", "label": "Premium Payment Date", "type": "text", "required": true, "placeholder": "" },
+            { "key": "swaption_expiration_date", "label": "Expiration Date", "type": "text", "required": true, "placeholder": "" },
+            { "key": "swaption_expiration_time", "label": "Expiration Time", "type": "text", "required": true, "placeholder": "" },
+            { "key": "settlement_method", "label": "Settlement Method", "type": "select", "required": true, "options": ["Physical Settlement", "Cash Settlement"] },
+            { "key": "cash_settlement_terms", "label": "Cash Settlement Terms", "type": "textarea", "required": false, "placeholder": "" }
+          ]
+        },
+        {
+          "title": "Underlying Swap Terms",
+          "fields": [
+            { "key": "fixed_rate_or_amount", "label": "Fixed Rate", "type": "text", "required": true, "placeholder": "" },
+            { "key": "fixed_day_count", "label": "Fixed Rate Day Count", "type": "select", "required": true, "options": ["30/360", "Actual/360", "Actual/365", "Actual/Actual"] },
+            { "key": "floating_rate_option", "label": "Floating Rate Option", "type": "text", "required": true, "placeholder": "" },
+            { "key": "designated_maturity", "label": "Designated Maturity", "type": "text", "required": true, "placeholder": "" },
+            { "key": "spread", "label": "Spread", "type": "text", "required": true, "placeholder": "" },
+            { "key": "floating_day_count", "label": "Floating Rate Day Count", "type": "select", "required": true, "options": ["Actual/360", "30/360", "Actual/365", "Actual/Actual"] }
+          ]
+        }
+      ]
+    },
+    "exhibit_ii_h": {
+      "title": "Exhibit II-H — Mark-to-Market Currency Swap Terms",
+      "show_for_exhibits": ["II-H"],
+      "fields": [
+        { "key": "constant_currency_payer", "label": "Constant Currency Payer", "type": "text", "required": true, "placeholder": "" },
+        { "key": "constant_currency", "label": "Constant Currency", "type": "text", "required": true, "placeholder": "e.g. USD" },
+        { "key": "constant_notional", "label": "Constant Notional Amount", "type": "text", "required": true, "placeholder": "" },
+        { "key": "variable_currency_payer", "label": "Variable Currency Payer", "type": "text", "required": true, "placeholder": "" },
+        { "key": "variable_currency", "label": "Variable Currency", "type": "text", "required": true, "placeholder": "e.g. EUR" },
+        { "key": "currency_exchange_rate", "label": "Initial Currency Exchange Rate", "type": "text", "required": false, "placeholder": "" },
+        { "key": "mtm_payment_date", "label": "MTM Payment Date", "type": "text", "required": false, "placeholder": "" },
+        { "key": "mtm_exchanges", "label": "Exchanges", "type": "text", "required": false, "placeholder": "" }
+      ]
+    },
+    "exhibit_ii_i": {
+      "title": "Exhibit II-I — Range Accrual Swap Terms",
+      "show_for_exhibits": ["II-I"],
+      "fields": [
+        { "key": "range_accrual_formula", "label": "Floating Rate Formula", "type": "textarea", "required": true, "placeholder": "" },
+        { "key": "lower_barrier_rate", "label": "Lower Barrier Rate", "type": "text", "required": true, "placeholder": "" },
+        { "key": "upper_barrier_rate", "label": "Upper Barrier Rate", "type": "text", "required": true, "placeholder": "" },
+        { "key": "reference_rate_fro", "label": "Reference Rate Floating Rate Option", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fixed_rate_or_amount", "label": "Fixed Rate", "type": "text", "required": true, "placeholder": "" },
+        { "key": "fixed_day_count", "label": "Day Count Fraction", "type": "select", "required": true, "options": ["Actual/360", "30/360", "Actual/365", "Actual/Actual"] }
+      ]
+    },
+    "exhibit_ii_j": {
+      "title": "Exhibit II-J — Floating to Floating Swap Terms",
+      "show_for_exhibits": ["II-J"],
+      "subsections": [
+        {
+          "title": "Floating Leg I",
+          "fields": [
+            { "key": "floating_payer_1", "label": "Floating Amount Payer", "type": "text", "required": true, "placeholder": "" },
+            { "key": "floating_fro_1", "label": "Floating Rate Option", "type": "text", "required": true, "placeholder": "" },
+            { "key": "designated_maturity_1", "label": "Designated Maturity", "type": "text", "required": true, "placeholder": "" },
+            { "key": "spread_1", "label": "Spread", "type": "text", "required": true, "placeholder": "" },
+            { "key": "floating_day_count_1", "label": "Day Count Fraction", "type": "select", "required": true, "options": ["Actual/360", "30/360", "Actual/365", "Actual/Actual"] },
+            { "key": "floating_payment_dates_1", "label": "Payment Dates", "type": "textarea", "required": true, "placeholder": "" },
+            { "key": "reset_dates_1", "label": "Reset Dates", "type": "text", "required": true, "placeholder": "" }
+          ]
+        },
+        {
+          "title": "Floating Leg II",
+          "fields": [
+            { "key": "floating_payer_2", "label": "Floating Amount Payer", "type": "text", "required": true, "placeholder": "" },
+            { "key": "floating_fro_2", "label": "Floating Rate Option", "type": "text", "required": true, "placeholder": "" },
+            { "key": "designated_maturity_2", "label": "Designated Maturity", "type": "text", "required": true, "placeholder": "" },
+            { "key": "spread_2", "label": "Spread", "type": "text", "required": true, "placeholder": "" },
+            { "key": "floating_day_count_2", "label": "Day Count Fraction", "type": "select", "required": true, "options": ["Actual/360", "30/360", "Actual/365", "Actual/Actual"] },
+            { "key": "floating_payment_dates_2", "label": "Payment Dates", "type": "textarea", "required": true, "placeholder": "" },
+            { "key": "reset_dates_2", "label": "Reset Dates", "type": "text", "required": true, "placeholder": "" }
+          ]
+        }
+      ]
+    },
+    "closing_optional": {
+      "title": "Exhibit II-F — Optional Early Termination",
+      "show_for_termination": "Optional",
+      "fields": [
+        { "key": "early_term_option_style", "label": "Option Style", "type": "select", "required": true, "options": ["European", "American", "Bermudan"] },
+        { "key": "early_term_date", "label": "Optional Early Termination Date", "type": "text", "required": false, "placeholder": "" },
+        { "key": "early_term_seller_buyer", "label": "Seller / Buyer", "type": "text", "required": false, "placeholder": "e.g. Seller: Party A / Buyer: Party B" },
+        { "key": "early_term_cash_settlement", "label": "Cash Settlement Method", "type": "text", "required": true, "placeholder": "e.g. Mid-Market Indicative Quotations" }
+      ]
+    },
+    "closing_mandatory": {
+      "title": "Exhibit II-G — Mandatory Early Termination",
+      "show_for_termination": "Mandatory",
+      "fields": [
+        { "key": "mandatory_term_date", "label": "Mandatory Early Termination Date", "type": "text", "required": true, "placeholder": "" },
+        { "key": "mandatory_cash_settlement", "label": "Cash Settlement Method", "type": "text", "required": true, "placeholder": "" }
+      ]
+    },
+    "custom_clauses": {
+      "title": "Additional Provisions / Custom Clauses",
+      "always_show": true,
+      "fields": [
+        {
+          "key": "custom_clauses",
+          "label": "Custom Clause",
+          "type": "repeater_pair",
+          "required": false,
+          "title_placeholder": "e.g. Business Day Convention",
+          "description_placeholder": "Describe the clause..."
+        }
+      ]
+    },
+    "logistics": {
+      "title": "Logistics & Account Details",
+      "always_show": true,
+      "fields": [
+        { "key": "party_a_office", "label": "Party A Office", "type": "text", "required": false, "placeholder": "e.g. London" },
+        { "key": "party_b_office", "label": "Party B Office", "type": "text", "required": false, "placeholder": "e.g. New York" },
+        { "key": "party_a_accounts", "label": "Party A Account Details", "type": "text", "required": false, "placeholder": "" },
+        { "key": "party_b_accounts", "label": "Party B Account Details", "type": "text", "required": false, "placeholder": "" },
+        { "key": "party_a_notice_details", "label": "Party A Notice Details", "type": "text", "required": false, "placeholder": "" },
+        { "key": "party_b_notice_details", "label": "Party B Notice Details", "type": "text", "required": false, "placeholder": "" },
+        { "key": "party_a_signatory_title", "label": "Party A Signatory Title", "type": "text", "required": false, "placeholder": "e.g. Authorised Signatory" },
+        { "key": "party_b_signatory_title", "label": "Party B Signatory Title", "type": "text", "required": false, "placeholder": "e.g. Authorised Signatory" },
+        { "key": "broker_arranger_details", "label": "Broker / Arranger", "type": "text", "required": false, "placeholder": "" },
+        { "key": "credit_support_provider", "label": "Credit Support Provider", "type": "text", "required": false, "placeholder": "" },
+        { "key": "credit_support_document", "label": "Credit Support Document", "type": "text", "required": false, "placeholder": "" }
+      ]
+    }
+  }
+}

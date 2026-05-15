@@ -1,0 +1,68 @@
+{
+    "exhibit": "II-A",
+
+    "party_a_name": "Goldman Sachs International",
+    "party_a_lei": "W22LROWP2IHZNBB6K528",
+    "party_a_attn": "Derivatives Documentation",
+    "party_a_address": "Peterborough Court, 133 Fleet Street, London EC4A 2BB",
+    "party_a_office": "London",
+    "party_a_accounts": "As notified by Party A in writing",
+    "party_a_signatory_title": "Authorised Signatory",
+    "party_a_notice_details": "",
+
+    "party_b_name": "JP Morgan Chase Bank N.A.",
+    "party_b_lei": "7H6GLXDRUGQFU57RNE97",
+    "party_b_attn": "Attn: Derivatives Documentation",
+    "party_b_address": "383 Madison Avenue, New York, NY 10017",
+    "party_b_office": "New York",
+    "party_b_accounts": "As notified by Party B in writing",
+    "party_b_signatory_title": "Authorised Signatory",
+    "party_b_notice_details": "",
+
+    "confirmation_date": "01 March 2026",
+    "transaction_title": "Interest Rate Swap Transaction",
+    "isda_agreement_date": "15 January 2020",
+
+    "notional_amount": "USD 50,000,000",
+    "trade_date": "01 March 2026",
+    "effective_date": "03 March 2026",
+    "termination_date": "03 March 2031",
+    "holiday_adjustment": "Applicable",
+    "calculation_agent": "Party A",
+    "notification_deadline": "",
+
+    "fixed_payment_dates": "3rd day of March and September each year, commencing 03 September 2026, subject to Modified Following Business Day Convention",
+    "fixed_delayed_payment": "",
+    "fixed_rate_or_amount": "3.75\\% per annum",
+    "fixed_day_count": "30/360",
+    "fixed_negative_rate_method": "",
+    "fixed_compounding": "Inapplicable",
+    "fixed_currency_amount": "",
+
+    "floating_payment_dates": "3rd day of March, June, September and December each year, commencing 03 June 2026, subject to Modified Following Business Day Convention",
+    "floating_rate_option": "USD-SOFR-COMPOUND",
+    "designated_maturity": "3 Months",
+    "spread": "0.25\\% per annum",
+    "floating_day_count": "Actual/360",
+    "reset_dates": "First day of each Calculation Period",
+    "floating_averaging": "",
+    "discounting": "",
+    "floating_currency_amount": "",
+
+    "termination_type": "",
+
+    "custom_clauses": [
+        {
+            "title": "Business Day Convention",
+            "description": "Modified Following, with New York and London as the relevant Business Day centers for all payment and reset date calculations."
+        },
+        {
+            "title": "Netting",
+            "description": "Payments due on the same date in the same currency shall be netted into a single payment obligation."
+        }
+    ],
+
+    "broker_arranger_details": "",
+    "credit_support_provider": "",
+    "credit_support_document": ""
+}

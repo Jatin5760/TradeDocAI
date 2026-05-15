@@ -1,0 +1,582 @@
+{
+  "id": "equity_trs",
+  "name": "Equity TRS Confirmation",
+  "description": "Equity Total Return Swap Confirmation",
+  "icon": "📈",
+
+  "steps": [
+    {
+      "id": "model_selection",
+      "title": "Select Financing Model",
+      "type": "selection",
+      "field": {
+        "key": "model_type",
+        "label": "Which Equity TRS model applies?",
+        "type": "select",
+        "required": true,
+        "options": [
+          {
+            "value": "I",
+            "label": "Model I — Term Rate Financing",
+            "subtitle": "SOFR / EURIBOR style term benchmark financing structure"
+          },
+          {
+            "value": "II",
+            "label": "Model II — Overnight Financing",
+            "subtitle": "Compounded overnight benchmark financing structure"
+          }
+        ]
+      }
+    }
+  ],
+
+  "sections": {
+
+    "party_agreement_details": {
+      "title": "Party & Agreement Details",
+      "always_show": true,
+      "fields": [
+        {
+          "key": "party_a_name",
+          "label": "Party A Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. Goldman Sachs International"
+        },
+        {
+          "key": "party_b_name",
+          "label": "Party B Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. JP Morgan Securities plc"
+        },
+        {
+          "key": "party_b_attn",
+          "label": "Party B Attention",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. Equity Derivatives Desk"
+        },
+        {
+          "key": "party_b_address",
+          "label": "Party B Address",
+          "type": "textarea",
+          "required": false,
+          "placeholder": "e.g. 25 Bank Street, London"
+        },
+        {
+          "key": "confirmation_date",
+          "label": "Confirmation Date",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. 12 May 2026"
+        },
+        {
+          "key": "transaction_title",
+          "label": "Transaction Title",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. Equity Total Return Swap Confirmation"
+        },
+        {
+          "key": "isda_agreement_date",
+          "label": "ISDA Agreement Date",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. 10 January 2024"
+        }
+      ]
+    },
+
+    "general_terms": {
+      "title": "General Terms",
+      "always_show": true,
+      "fields": [
+        {
+          "key": "trade_date",
+          "label": "Trade Date",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. 12 May 2026"
+        },
+        {
+          "key": "effective_date",
+          "label": "Effective Date",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. 14 May 2026"
+        },
+        {
+          "key": "termination_date",
+          "label": "Termination Date",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. 14 May 2027"
+        },
+        {
+          "key": "unscheduled_holiday_adjustment",
+          "label": "Unscheduled Holiday Adjustment",
+          "type": "select",
+          "required": false,
+          "options": [
+            "Following",
+            "Modified Following",
+            "Preceding",
+            "None"
+          ]
+        },
+        {
+          "key": "calculation_agent",
+          "label": "Calculation Agent",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. Party A"
+        }
+      ]
+    },
+
+    "floating_amounts_common": {
+      "title": "Floating Amount Terms",
+      "always_show": true,
+      "fields": [
+        {
+          "key": "floating_amount_payer",
+          "label": "Floating Amount Payer",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. Party B"
+        },
+        {
+          "key": "notional_amount",
+          "label": "Notional Amount",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. USD 10,000,000"
+        },
+        {
+          "key": "floating_payment_dates",
+          "label": "Floating Amount Payment Dates",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "e.g. Quarterly"
+        },
+        {
+          "key": "floating_period_end_dates",
+          "label": "Floating Period End Dates",
+          "type": "textarea",
+          "required": true,
+          "placeholder": "e.g. Quarterly"
+        },
+        {
+          "key": "delayed_payment",
+          "label": "Delayed Payment / Early Payment",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. Applicable"
+        },
+        {
+          "key": "spread",
+          "label": "Spread",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. 1.25% per annum"
+        },
+        {
+          "key": "day_count_fraction",
+          "label": "Floating Rate Day Count Fraction",
+          "type": "select",
+          "required": true,
+          "options": [
+            "ACT/360",
+            "30/360",
+            "ACT/365",
+            "ACT/ACT"
+          ]
+        },
+        {
+          "key": "reset_dates",
+          "label": "Reset Dates",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. First Business Day of each Calculation Period"
+        },
+        {
+          "key": "rate_cut_off_dates",
+          "label": "Rate Cut-off Dates",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. 2 Business Days"
+        },
+        {
+          "key": "method_of_averaging",
+          "label": "Method of Averaging",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. Weighted Average"
+        },
+        {
+          "key": "rounding",
+          "label": "Rounding",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. 5 decimal places"
+        },
+        {
+          "key": "negative_interest_rate_method",
+          "label": "Negative Interest Rate Method",
+          "type": "select",
+          "required": true,
+          "options": [
+            "Zero Floor",
+            "Negative Rates Apply"
+          ]
+        },
+        {
+          "key": "successor_benchmark",
+          "label": "Successor Benchmark",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. Fallback SOFR"
+        },
+        {
+          "key": "business_days",
+          "label": "Business Days",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. New York Business Days"
+        }
+      ]
+    },
+
+    "model_i_terms": {
+      "title": "Model I — Term Rate Financing",
+      "show_for_models": ["I"],
+      "fields": [
+        {
+          "key": "initial_floating_rate",
+          "label": "Initial Floating Rate",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. 5.25%"
+        },
+        {
+          "key": "floating_rate_option",
+          "label": "Floating Rate Option",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. SOFR"
+        },
+        {
+          "key": "applicable_benchmark",
+          "label": "Applicable Benchmark",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. USD SOFR"
+        },
+        {
+          "key": "designated_maturity",
+          "label": "Designated Maturity",
+          "type": "text",
+          "required": true,
+          "placeholder": "e.g. 3 Months"
+        },
+        {
+          "key": "fixing_day",
+          "label": "Fixing Day",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. 2 Business Days prior"
+        },
+        {
+          "key": "fixing_time",
+          "label": "Fixing Time",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. 11:00 AM NY Time"
+        },
+        {
+          "key": "linear_interpolation",
+          "label": "Linear Interpolation",
+          "type": "select",
+          "required": false,
+          "options": [
+            "",
+            "Applicable",
+            "Not Applicable"
+          ]
+        },
+        {
+          "key": "compounding_applicable",
+          "label": "Compounding Applicable?",
+          "type": "select",
+          "required": true,
+          "options": [
+            "true",
+            "false"
+          ]
+        },
+        {
+          "key": "compounding_type",
+          "label": "Compounding Type",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. Daily Compounding",
+          "show_when": {
+            "field": "compounding_applicable",
+            "value": "true"
+          }
+        },
+        {
+          "key": "compounding_dates",
+          "label": "Compounding Dates",
+          "type": "text",
+          "required": false,
+          "placeholder": "e.g. Each Business Day",
+          "show_when": {
+            "field": "compounding_applicable",
+            "value": "true"
+          }
+        }
+      ]
+    },
+
+    "model_ii_terms": {
+      "title": "Model II — Overnight Financing",
+      "show_for_models": ["II"],
+      "subsections": [
+
+        {
+          "title": "Overnight Floating Rate Terms",
+          "fields": [
+            {
+              "key": "floating_rate_option",
+              "label": "Floating Rate Option",
+              "type": "text",
+              "required": true,
+              "placeholder": "e.g. €STR"
+            },
+            {
+              "key": "applicable_benchmark",
+              "label": "Applicable Benchmark",
+              "type": "text",
+              "required": false,
+              "placeholder": "e.g. EUR Short-Term Rate"
+            },
+            {
+              "key": "fixing_day",
+              "label": "Fixing Day",
+              "type": "text",
+              "required": false,
+              "placeholder": "e.g. 1 TARGET Business Day prior"
+            },
+            {
+              "key": "fixing_time",
+              "label": "Fixing Time",
+              "type": "text",
+              "required": false,
+              "placeholder": "e.g. 9:00 AM CET"
+            }
+          ]
+        },
+
+        {
+          "title": "Compounding / Averaging",
+          "fields": [
+            {
+              "key": "compounding_averaging_applicable",
+              "label": "Compounding / Averaging Applicable?",
+              "type": "select",
+              "required": true,
+              "options": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "key": "compounding",
+              "label": "Compounding",
+              "type": "select",
+              "required": false,
+              "options": [
+                "",
+                "Applicable",
+                "Not Applicable"
+              ],
+              "show_when": {
+                "field": "compounding_averaging_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "averaging",
+              "label": "Averaging",
+              "type": "select",
+              "required": false,
+              "options": [
+                "",
+                "Applicable",
+                "Not Applicable"
+              ],
+              "show_when": {
+                "field": "compounding_averaging_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "lookback",
+              "label": "Lookback",
+              "type": "text",
+              "required": false,
+              "placeholder": "e.g. 5 Business Days",
+              "show_when": {
+                "field": "compounding_averaging_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "observation_period_shift",
+              "label": "Observation Period Shift",
+              "type": "select",
+              "required": false,
+              "options": [
+                "",
+                "Applicable",
+                "Not Applicable"
+              ],
+              "show_when": {
+                "field": "compounding_averaging_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "set_in_advance",
+              "label": "Set-in-Advance",
+              "type": "select",
+              "required": false,
+              "options": [
+                "Yes",
+                "No"
+              ],
+              "show_when": {
+                "field": "compounding_averaging_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "lockout",
+              "label": "Lockout",
+              "type": "text",
+              "required": false,
+              "placeholder": "e.g. 2 Business Days",
+              "show_when": {
+                "field": "compounding_averaging_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "daily_capped_floored_rate",
+              "label": "Daily Capped / Floored Rate",
+              "type": "text",
+              "required": false,
+              "placeholder": "e.g. Daily Floor at 0%",
+              "show_when": {
+                "field": "compounding_averaging_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "day_count_basis",
+              "label": "Day Count Basis",
+              "type": "select",
+              "required": false,
+              "options": [
+                "ACT/360",
+                "30/360",
+                "ACT/365",
+                "ACT/ACT"
+              ],
+              "show_when": {
+                "field": "compounding_averaging_applicable",
+                "value": "true"
+              }
+            }
+          ]
+        },
+
+        {
+          "title": "Index Provisions",
+          "fields": [
+            {
+              "key": "index_provisions_applicable",
+              "label": "Index Provisions Applicable?",
+              "type": "select",
+              "required": true,
+              "options": [
+                "true",
+                "false"
+              ]
+            },
+            {
+              "key": "index_method",
+              "label": "Index Method",
+              "type": "text",
+              "required": false,
+              "placeholder": "e.g. Compounded Index",
+              "show_when": {
+                "field": "index_provisions_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "index_set_advance",
+              "label": "Set-in-Advance",
+              "type": "select",
+              "required": false,
+              "options": [
+                "Yes",
+                "No"
+              ],
+              "show_when": {
+                "field": "index_provisions_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "index_observation_period_shift",
+              "label": "Observation Period Shift",
+              "type": "select",
+              "required": false,
+              "options": [
+                "",
+                "Applicable",
+                "Not Applicable"
+              ],
+              "show_when": {
+                "field": "index_provisions_applicable",
+                "value": "true"
+              }
+            },
+            {
+              "key": "index_day_count_basis",
+              "label": "Day Count Basis",
+              "type": "select",
+              "required": false,
+              "options": [
+                "ACT/360",
+                "30/360",
+                "ACT/365",
+                "ACT/ACT"
+              ],
+              "show_when": {
+                "field": "index_provisions_applicable",
+                "value": "true"
+              }
+            }
+          ]
+        }
+
+      ]
+    }
+
+  }
+}

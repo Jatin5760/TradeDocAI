@@ -1,0 +1,501 @@
+{
+    "id": "cds",
+    "name": "CDS Confirmation",
+    "description": "Credit Default Swap Confirmation",
+    "icon": "🛡️",
+    "steps": [
+        {
+            "id": "general_terms",
+            "title": "General & Economic Terms",
+            "type": "fields",
+            "fields": [
+                "transaction_type",
+                "trade_date",
+                "effective_date",
+                "scheduled_termination_date",
+                "reference_entity",
+                "reference_obligation",
+                "notional_amount",
+                "fixed_rate"
+            ]
+        },
+        {
+            "id": "settlement_details",
+            "title": "Settlement & Payment Details",
+            "type": "fields",
+            "fields": [
+                "fixed_day_count",
+                "fixed_payment_dates",
+                "settlement_method"
+            ]
+        },
+        {
+            "id": "additional_provisions",
+            "title": "Additional Provisions",
+            "type": "selection",
+            "field": {
+                "key": "additional_provisions",
+                "label": "Are there any Additional Provisions?",
+                "type": "select",
+                "required": true,
+                "options": [
+                    {
+                        "value": "None",
+                        "label": "None",
+                        "subtitle": "Standard Matrix definitions apply"
+                    },
+                    {
+                        "value": "Fixed Recovery",
+                        "label": "Fixed Recovery CDS",
+                        "subtitle": "Pre-agreed final price upon default"
+                    },
+                    {
+                        "value": "Recovery Lock",
+                        "label": "Recovery Lock CDS",
+                        "subtitle": "Lock in a specific recovery price"
+                    },
+                    {
+                        "value": "Monoline",
+                        "label": "Monoline Insurer",
+                        "subtitle": "Special provisions for Monoline Reference Entities"
+                    }
+                ]
+            }
+        }
+    ],
+    "sections": {
+        "party_details": {
+            "title": "Party & Agreement Details",
+            "always_show": true,
+            "fields": [
+                {
+                    "key": "party_a_name",
+                    "label": "Party A Name (Protection Buyer)",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. Global Bank PLC"
+                },
+                {
+                    "key": "party_a_lei",
+                    "label": "Party A LEI",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. 5493006MHB84DD0ZWV18"
+                },
+                {
+                    "key": "party_b_name",
+                    "label": "Party B Name (Protection Seller)",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. Alpha Hedge Fund LP"
+                },
+                {
+                    "key": "party_b_lei",
+                    "label": "Party B LEI",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. 5493001X4U6H6Q98U222"
+                },
+                {
+                    "key": "confirmation_date",
+                    "label": "Confirmation Date",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. October 24, 2023"
+                },
+                {
+                    "key": "transaction_title",
+                    "label": "Transaction Title",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. European Corporate Single Name Credit Default Swap"
+                },
+                {
+                    "key": "isda_agreement_date",
+                    "label": "ISDA Agreement Date",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. May 15, 2010"
+                }
+            ]
+        },
+        "general_terms": {
+            "title": "General Terms",
+            "always_show": true,
+            "fields": [
+                {
+                    "key": "transaction_type",
+                    "label": "Transaction Type",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. Standard European Corporate"
+                },
+                {
+                    "key": "trade_date",
+                    "label": "Trade Date",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. October 20, 2023"
+                },
+                {
+                    "key": "effective_date",
+                    "label": "Effective Date",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. October 21, 2023"
+                },
+                {
+                    "key": "scheduled_termination_date",
+                    "label": "Scheduled Termination Date",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. December 20, 2028"
+                },
+                {
+                    "key": "calculation_agent",
+                    "label": "Calculation Agent",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Party A"
+                },
+                {
+                    "key": "reference_entity",
+                    "label": "Reference Entity",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. Volkswagen AG"
+                },
+                {
+                    "key": "reference_entity_lei",
+                    "label": "Reference Entity LEI",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. 5299000JONKRU3K1F490"
+                },
+                {
+                    "key": "reference_obligation",
+                    "label": "Reference Obligation",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. EUR 500,000,000 3.5% Notes due 2029"
+                },
+                {
+                    "key": "reference_obligation_cusip",
+                    "label": "Reference Obligation CUSIP/ISIN",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. ISIN: XS1234567890"
+                },
+                {
+                    "key": "seniority_level",
+                    "label": "Seniority Level",
+                    "type": "select",
+                    "required": true,
+                    "options": [
+                        "Senior Level",
+                        "Subordinated Level"
+                    ]
+                },
+                {
+                    "key": "standard_reference_obligation",
+                    "label": "Standard Reference Obligation",
+                    "type": "select",
+                    "required": true,
+                    "options": [
+                        "Applicable",
+                        "Not Applicable"
+                    ]
+                }
+            ]
+        },
+        "fixed_payments": {
+            "title": "Fixed Payments (Premium Leg)",
+            "always_show": true,
+            "fields": [
+                {
+                    "key": "notional_amount",
+                    "label": "Calculation Amount (Notional)",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. EUR 10,000,000"
+                },
+                {
+                    "key": "fixed_rate",
+                    "label": "Fixed Rate (bps per annum)",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. 100"
+                },
+                {
+                    "key": "fixed_day_count",
+                    "label": "Fixed Rate Day Count Fraction",
+                    "type": "select",
+                    "required": true,
+                    "options": [
+                        "Actual/360",
+                        "Actual/365",
+                        "30/360"
+                    ]
+                },
+                {
+                    "key": "fixed_payment_dates",
+                    "label": "Payment Dates",
+                    "type": "textarea",
+                    "required": true,
+                    "placeholder": "e.g. March 20, June 20, September 20, and December 20 in each year"
+                },
+                {
+                    "key": "business_day_convention",
+                    "label": "Business Day Convention",
+                    "type": "select",
+                    "required": true,
+                    "options": [
+                        "Following",
+                        "Modified Following",
+                        "Preceding"
+                    ]
+                },
+                {
+                    "key": "business_day_centers",
+                    "label": "Business Day Centers",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. London, TARGET Settlement Day"
+                },
+                {
+                    "key": "initial_payment_payer",
+                    "label": "Initial Payment Payer",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Party B"
+                },
+                {
+                    "key": "initial_payment_amount",
+                    "label": "Initial Payment Amount",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. EUR 25,000"
+                }
+            ]
+        },
+        "floating_payment": {
+            "title": "Floating Payment & Settlement Terms",
+            "always_show": true,
+            "fields": [
+                {
+                    "key": "credit_event_notice_after_restructuring",
+                    "label": "Credit Event Notice After Restructuring",
+                    "type": "select",
+                    "required": true,
+                    "options": [
+                        "Applicable",
+                        "Not Applicable"
+                    ]
+                },
+                {
+                    "key": "settlement_method",
+                    "label": "Settlement Method",
+                    "type": "select",
+                    "required": true,
+                    "options": [
+                        "Auction Settlement",
+                        "Physical Settlement",
+                        "Cash Settlement"
+                    ]
+                },
+                {
+                    "key": "physical_settlement_period",
+                    "label": "Physical Settlement Period",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. 30 Business Days",
+                    "show_when": {
+                        "field": "settlement_method",
+                        "value": "Physical Settlement"
+                    }
+                },
+                {
+                    "key": "deliverable_obligation_category",
+                    "label": "Deliverable Obligation Category",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Bond or Loan",
+                    "show_when": {
+                        "field": "settlement_method",
+                        "value": "Physical Settlement"
+                    }
+                },
+                {
+                    "key": "deliverable_obligation_characteristics",
+                    "label": "Deliverable Obligation Characteristics",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Not Subordinated, Specified Currency",
+                    "show_when": {
+                        "field": "settlement_method",
+                        "value": "Physical Settlement"
+                    }
+                },
+                {
+                    "key": "escrow",
+                    "label": "Escrow",
+                    "type": "select",
+                    "required": false,
+                    "options": [
+                        "Applicable",
+                        "Not Applicable"
+                    ],
+                    "show_when": {
+                        "field": "settlement_method",
+                        "value": "Physical Settlement"
+                    }
+                },
+                {
+                    "key": "valuation_method",
+                    "label": "Valuation Method",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Highest",
+                    "show_when": {
+                        "field": "settlement_method",
+                        "value": "Cash Settlement"
+                    }
+                },
+                {
+                    "key": "valuation_date",
+                    "label": "Valuation Date",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Single Valuation Date",
+                    "show_when": {
+                        "field": "settlement_method",
+                        "value": "Cash Settlement"
+                    }
+                },
+                {
+                    "key": "reference_price",
+                    "label": "Reference Price",
+                    "type": "text",
+                    "required": true,
+                    "placeholder": "e.g. 100%"
+                }
+            ]
+        },
+        "specific_additional_provisions": {
+            "title": "Specific Additional Provisions",
+            "always_show": false,
+            "show_when": {
+                "field": "additional_provisions",
+                "operator": "not_equal",
+                "value": "None"
+            },
+            "fields": [
+                {
+                    "key": "fixed_recovery_final_price",
+                    "label": "Fixed Recovery Final Price",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. 40%",
+                    "show_when": {
+                        "field": "additional_provisions",
+                        "value": "Fixed Recovery"
+                    }
+                },
+                {
+                    "key": "recovery_lock_reference_price",
+                    "label": "Recovery Lock Reference Price",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. 40%",
+                    "show_when": {
+                        "field": "additional_provisions",
+                        "value": "Recovery Lock"
+                    }
+                }
+            ]
+        },
+        "custom_clauses": {
+            "title": "Custom Clauses",
+            "always_show": true,
+            "fields": [
+                {
+                    "key": "custom_clauses",
+                    "label": "Custom Clause",
+                    "type": "repeater_pair",
+                    "required": false,
+                    "title_placeholder": "e.g. Dispute Resolution",
+                    "description_placeholder": "Describe the clause..."
+                }
+            ]
+        },
+        "logistics": {
+            "title": "Logistics & Account Details",
+            "always_show": true,
+            "fields": [
+                {
+                    "key": "party_a_office",
+                    "label": "Party A Office",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. London"
+                },
+                {
+                    "key": "party_b_office",
+                    "label": "Party B Office",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. New York"
+                },
+                {
+                    "key": "party_a_accounts",
+                    "label": "Party A Account Details",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Account No. 12345678, SWIFT: GBPLXXXX"
+                },
+                {
+                    "key": "party_b_accounts",
+                    "label": "Party B Account Details",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Account No. 87654321, SWIFT: ALPHXXXX"
+                },
+                {
+                    "key": "party_a_notice_details",
+                    "label": "Party A Contact Details for Notice",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Attn: CDS Ops"
+                },
+                {
+                    "key": "party_b_notice_details",
+                    "label": "Party B Contact Details for Notice",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Attn: Derivatives Operations"
+                },
+                {
+                    "key": "party_a_signatory_title",
+                    "label": "Party A Signatory Title",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Managing Director"
+                },
+                {
+                    "key": "party_b_signatory_title",
+                    "label": "Party B Signatory Title",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Portfolio Manager"
+                },
+                {
+                    "key": "broker_arranger_details",
+                    "label": "Broker / Arranger",
+                    "type": "text",
+                    "required": false,
+                    "placeholder": "e.g. Interdealer Brokers LLC"
+                }
+            ]
+        }
+    }
+}

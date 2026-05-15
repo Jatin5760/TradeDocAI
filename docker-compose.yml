@@ -1,0 +1,65 @@
+services:
+
+  mongo:
+    image: mongo:7.0
+    container_name: tradedocai_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: tradedocai
+    volumes:
+      - mongo_data:/data/db        # persistent volume — data survives restarts
+    networks:
+      - tradedocai_net
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tradedocai_app
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/}
+      MONGO_DB_NAME: ${MONGO_DB_NAME:-tradedocai}
+      PORT: 5055
+      APP_ENV: ${APP_ENV:-production}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required for production}
+      AUTH_MAX_AGE_SECONDS: ${AUTH_MAX_AGE_SECONDS:-604800}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5055}
+      ENABLE_DEMO_USER: ${ENABLE_DEMO_USER:-false}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      PDF_SERVICES_CLIENT_ID: ${PDF_SERVICES_CLIENT_ID}
+      PDF_SERVICES_CLIENT_SECRET: ${PDF_SERVICES_CLIENT_SECRET}
+      PYTHONIOENCODING: utf-8
+      PDF_RETENTION_HOURS: ${PDF_RETENTION_HOURS:-24}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-4}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-180}
+    ports:
+      - "5055:5055"
+    volumes:
+      - pdf_temp:/app/output_confirmations/temp
+    networks:
+      - tradedocai_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5055/health/live', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mongo_data:
+  pdf_temp:
+
+networks:
+  tradedocai_net:
+    driver: bridge

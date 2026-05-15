@@ -1,0 +1,73 @@
+{
+  "id": "fx_ndf",
+  "name": "FX NDF Confirmation",
+  "description": "Non-Deliverable FX Forward Transaction",
+  "icon": "💱",
+  "sections": [
+    {
+      "id": "general_terms",
+      "title": "General Terms",
+      "fields": [
+        { "key": "reference_currency", "label": "Reference Currency", "type": "text", "required": true, "placeholder": "e.g. BRL, CNY, INR" },
+        { "key": "settlement_currency", "label": "Settlement Currency", "type": "text", "required": true, "placeholder": "e.g. USD" },
+        { "key": "trade_date", "label": "Trade Date", "type": "text", "required": true, "placeholder": "e.g. 01 March 2026" },
+        { "key": "reference_currency_full", "label": "Reference Currency (Full Name)", "type": "text", "required": true, "placeholder": "e.g. Brazilian Real (BRL)" },
+        { "key": "notional_amount", "label": "Notional Amount", "type": "text", "required": true, "placeholder": "e.g. USD 5,000,000" },
+        { "key": "forward_rate", "label": "Forward Rate", "type": "text", "required": true, "placeholder": "e.g. 5.25" },
+        { "key": "reference_currency_notional_amount", "label": "Reference Currency Notional Amount", "type": "text", "required": true, "placeholder": "e.g. BRL 26,250,000" },
+        { "key": "buyer", "label": "Reference Currency Buyer", "type": "text", "required": true, "placeholder": "e.g. Goldman Sachs International" },
+        { "key": "seller", "label": "Reference Currency Seller", "type": "text", "required": true, "placeholder": "e.g. Banco Bradesco S.A." },
+        { "key": "settlement_currency_full", "label": "Settlement Currency (Full Name)", "type": "text", "required": true, "placeholder": "e.g. U.S. Dollars" },
+        { "key": "settlement_date", "label": "Settlement Date", "type": "textarea", "required": true, "placeholder": "e.g. 03 June 2026, subject to adjustment..." },
+        { "key": "settlement_type", "label": "Settlement Type", "type": "select", "required": true, "options": ["Non-Deliverable", "Deliverable"] },
+        { "key": "settlement_rate_option", "label": "Settlement Rate Option", "type": "text", "required": true, "placeholder": "e.g. BRL PTAX (BRL09)" },
+        { "key": "valuation_date", "label": "Valuation Date", "type": "textarea", "required": true, "placeholder": "e.g. 01 June 2026 (Scheduled Valuation Date)..." }
+      ]
+    },
+    {
+      "id": "disruption_events",
+      "title": "Disruption Events",
+      "fields": [
+        { "key": "price_source_disruption", "label": "Price Source Disruption", "type": "select", "required": false, "options": ["", "Applicable", "Not Applicable"], "placeholder": "Leave empty to hide this section" }
+      ]
+    },
+    {
+      "id": "disruption_fallbacks",
+      "title": "Disruption Fallbacks",
+      "fields": [
+        {
+          "key": "disruption_fallbacks",
+          "label": "Disruption Fallback",
+          "type": "repeater_simple",
+          "required": false,
+          "placeholder": "e.g. Valuation Postponement",
+          "defaults": [
+            "Valuation Postponement",
+            "Calculation Agent Determination of Settlement Rate"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "other_terms",
+      "title": "Other Terms",
+      "fields": [
+        {
+          "key": "other_terms",
+          "label": "Term",
+          "type": "repeater_pair",
+          "required": false,
+          "title_placeholder": "e.g. Unscheduled Holiday",
+          "description_placeholder": "Describe the term..."
+        }
+      ]
+    },
+    {
+      "id": "calculation_agent",
+      "title": "Calculation Agent",
+      "fields": [
+        { "key": "calculation_agent", "label": "Calculation Agent", "type": "text", "required": true, "placeholder": "e.g. Goldman Sachs International" }
+      ]
+    }
+  ]
+}

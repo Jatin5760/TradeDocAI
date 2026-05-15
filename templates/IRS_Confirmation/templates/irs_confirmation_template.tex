@@ -1,0 +1,548 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{fancyhdr}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\cfoot{\thepage}
+
+\begin{document}
+
+% ======================================================================
+% EXHIBIT I - OPENING (ALWAYS PRESENT)
+% ======================================================================
+
+\begin{center}
+    \textbf{<< party_a_name >>}
+\end{center}
+\vspace{0.3cm}
+
+\begin{flushright}
+    << confirmation_date >>
+\end{flushright}
+
+\vspace{0.3cm}
+\noindent \textbf{<< party_b_name >>} \\
+\noindent << party_b_attn >> \\
+\noindent << party_b_address >>
+
+\vspace{0.5cm}
+\noindent \textbf{Re: << transaction_title >>}
+
+\vspace{0.3cm}
+\noindent Dear Sir/Madam,
+
+\vspace{0.3cm}
+\noindent The purpose of this letter (this ``Confirmation'') is to confirm the terms and conditions of the Transaction entered into between us on the Trade Date specified below.
+
+\vspace{0.3cm}
+\noindent The definitions and provisions contained in the 2021 ISDA Interest Rate Derivatives Definitions, as published by the International Swaps and Derivatives Association, Inc., are incorporated into this Confirmation. In the event of any inconsistency between those definitions and provisions and this Confirmation, this Confirmation will govern.
+
+\vspace{0.3cm}
+\noindent This Confirmation constitutes a ``Confirmation'' as referred to in, and supplements, forms part of and is subject to, the ISDA Master Agreement dated as of \textbf{<< isda_agreement_date >>}, as amended and supplemented from time to time (the ``Agreement''), between \textbf{<< party_a_name >>} (``Party A'') and \textbf{<< party_b_name >>} (``Party B''). All provisions contained in the Agreement govern this Confirmation except as expressly modified below.
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+% ======================================================================
+% ECONOMIC TERMS - EXHIBIT II-A to II-J
+% ======================================================================
+
+<<- if exhibit == 'II-A' >>
+\begin{center}
+    \textbf{EXHIBIT II-A} \\
+    \textit{Additional Provisions for a Single Currency Rate Swap or Cross-Currency Rate Swap Transaction}
+\end{center}
+
+\noindent The terms of the particular Transaction to which this Confirmation relates are as follows:
+
+\vspace{0.3cm}
+\noindent \textbf{1.\quad General Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_lei >>
+    \item \textbf{Party A LEI:} << party_a_lei >>
+<<- endif >>
+<<- if party_b_lei >>
+    \item \textbf{Party B LEI:} << party_b_lei >>
+<<- endif >>
+<<- if notional_amount >>
+    \item \textbf{Notional Amount:} << notional_amount >>
+<<- endif >>
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Termination Date:} << termination_date >>
+<<- if holiday_adjustment >>
+    \item \textbf{Unscheduled Holiday Adjustment:} << holiday_adjustment >>
+<<- endif >>
+<<- if calculation_agent >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+<<- endif >>
+<<- if notification_deadline >>
+    \item \textbf{Notification Deadline:} << notification_deadline >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{2.\quad Fixed Amounts:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Fixed Amount Payer:} Party A (<< party_a_name >>)
+<<- if fixed_currency_amount >>
+    \item \textbf{Fixed Amount Payer Currency Amount:} << fixed_currency_amount >>
+<<- endif >>
+    \item \textbf{Fixed Amount Payer Payment Dates:} << fixed_payment_dates >>
+<<- if fixed_delayed_payment >>
+    \item \textbf{Delayed Payment / Early Payment:} << fixed_delayed_payment >>
+<<- endif >>
+    \item \textbf{Fixed Rate:} << fixed_rate_or_amount >>
+    \item \textbf{Fixed Rate Day Count Fraction:} << fixed_day_count >>
+<<- if fixed_negative_rate_method >>
+    \item \textbf{Fixed Negative Interest Rate Method:} << fixed_negative_rate_method >>
+<<- endif >>
+<<- if fixed_compounding >>
+    \item \textbf{Compounding:} << fixed_compounding >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{3.\quad Floating Amounts:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Floating Amount Payer:} Party B (<< party_b_name >>)
+<<- if floating_currency_amount >>
+    \item \textbf{Floating Amount Payer Currency Amount:} << floating_currency_amount >>
+<<- endif >>
+    \item \textbf{Floating Amount Payer Payment Dates:} << floating_payment_dates >>
+    \item \textbf{Floating Rate Option:} << floating_rate_option >>
+    \item \textbf{Designated Maturity:} << designated_maturity >>
+    \item \textbf{Spread:} << spread >>
+    \item \textbf{Floating Rate Day Count Fraction:} << floating_day_count >>
+    \item \textbf{Reset Dates:} << reset_dates >>
+<<- if floating_averaging >>
+    \item \textbf{Method of Averaging:} << floating_averaging >>
+<<- endif >>
+<<- if discounting >>
+    \item \textbf{Discounting:} << discounting >>
+<<- endif >>
+\end{itemize}
+
+<<- elif exhibit == 'II-B' >>
+\begin{center}
+    \textbf{EXHIBIT II-B} \\
+    \textit{Additional Provisions for a Cap Transaction, Floor Transaction or Rate Collar Transaction}
+\end{center}
+
+\noindent The Transaction to which this Confirmation relates is a \textbf{<< cap_floor_collar_type >>}.
+
+\vspace{0.3cm}
+\noindent \textbf{1.\quad General Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_lei >>
+    \item \textbf{Party A LEI:} << party_a_lei >>
+<<- endif >>
+<<- if party_b_lei >>
+    \item \textbf{Party B LEI:} << party_b_lei >>
+<<- endif >>
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Termination Date:} << termination_date >>
+<<- if notional_amount >>
+    \item \textbf{Notional Amount:} << notional_amount >>
+<<- endif >>
+<<- if calculation_agent >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{2.\quad Cap / Floor Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{<< cap_floor_collar_type >> Rate:} << cap_floor_rate >>
+    \item \textbf{Floating Amount Payer:} << cap_floating_payer >>
+    \item \textbf{Floating Rate Option:} << cap_floating_rate_option >>
+    \item \textbf{Floating Rate Day Count Fraction:} << cap_day_count >>
+    \item \textbf{Payment Dates:} << cap_payment_dates >>
+<<- if cap_floor_collar_type == 'Collar' >>
+    \item \textbf{Fixed Amount Payer:} << collar_fixed_payer >>
+    \item \textbf{Floor Rate:} << floor_rate >>
+<<- endif >>
+\end{itemize}
+
+<<- elif exhibit == 'II-C' >>
+\begin{center}
+    \textbf{EXHIBIT II-C} \\
+    \textit{Additional Provisions for a Forward Rate Agreement}
+\end{center}
+
+\vspace{0.3cm}
+\noindent \textbf{1.\quad General Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_lei >>
+    \item \textbf{Party A LEI:} << party_a_lei >>
+<<- endif >>
+<<- if party_b_lei >>
+    \item \textbf{Party B LEI:} << party_b_lei >>
+<<- endif >>
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Termination Date:} << termination_date >>
+    \item \textbf{Notional Amount:} << notional_amount >>
+<<- if calculation_agent >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{2.\quad FRA Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Payment Date:} << fra_payment_date >>
+    \item \textbf{Fixed Amount Payer:} << fra_fixed_payer >>
+    \item \textbf{Fixed Rate:} << fra_fixed_rate >>
+    \item \textbf{Floating Amount Payer:} << fra_floating_payer >>
+    \item \textbf{Floating Rate Option:} << fra_floating_rate_option >>
+    \item \textbf{Designated Maturity:} << fra_designated_maturity >>
+    \item \textbf{Day Count Fraction:} << fra_day_count >>
+    \item \textbf{FRA Discounting:} << fra_discounting >>
+\end{itemize}
+
+<<- elif exhibit == 'II-D' >>
+\begin{center}
+    \textbf{EXHIBIT II-D} \\
+    \textit{Additional Provisions for a Self-Compounding OIS Transaction}
+\end{center}
+
+\vspace{0.3cm}
+\noindent \textbf{1.\quad General Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_lei >>
+    \item \textbf{Party A LEI:} << party_a_lei >>
+<<- endif >>
+<<- if party_b_lei >>
+    \item \textbf{Party B LEI:} << party_b_lei >>
+<<- endif >>
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Termination Date:} << termination_date >>
+    \item \textbf{Notional Amount:} << notional_amount >>
+<<- if calculation_agent >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{2.\quad OIS Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Fixed Amount Payer:} Party A (<< party_a_name >>)
+    \item \textbf{Fixed Rate:} << fixed_rate_or_amount >>
+    \item \textbf{Fixed Rate Day Count Fraction:} << fixed_day_count >>
+    \item \textbf{Floating Amount Payer:} Party B (<< party_b_name >>)
+    \item \textbf{Floating Rate Option:} << ois_floating_rate_option >>
+    \item \textbf{Payment Dates:} << ois_payment_dates >>
+<<- if ois_delayed_payment >>
+    \item \textbf{Delayed Payment:} << ois_delayed_payment >>
+<<- endif >>
+\end{itemize}
+
+<<- elif exhibit == 'II-E' >>
+\begin{center}
+    \textbf{EXHIBIT II-E} \\
+    \textit{Additional Provisions for a Swaption or Swaption Straddle}
+\end{center}
+
+\vspace{0.3cm}
+\noindent \textbf{1.\quad Option Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_lei >>
+    \item \textbf{Party A LEI:} << party_a_lei >>
+<<- endif >>
+<<- if party_b_lei >>
+    \item \textbf{Party B LEI:} << party_b_lei >>
+<<- endif >>
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Option Style:} << option_style >>
+    \item \textbf{Seller:} << swaption_seller >>
+    \item \textbf{Buyer:} << swaption_buyer >>
+    \item \textbf{Premium:} << swaption_premium >>
+    \item \textbf{Premium Payment Date:} << swaption_premium_date >>
+    \item \textbf{Expiration Date:} << swaption_expiration_date >>
+    \item \textbf{Expiration Time:} << swaption_expiration_time >>
+    \item \textbf{Settlement Method:} << settlement_method >>
+<<- if cash_settlement_terms >>
+    \item \textbf{Cash Settlement Terms:} << cash_settlement_terms >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{2.\quad Underlying Swap Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Termination Date:} << termination_date >>
+    \item \textbf{Notional Amount:} << notional_amount >>
+    \item \textbf{Fixed Rate Payer:} Party A (<< party_a_name >>)
+    \item \textbf{Fixed Rate:} << fixed_rate_or_amount >>
+    \item \textbf{Fixed Rate Day Count:} << fixed_day_count >>
+    \item \textbf{Floating Rate Payer:} Party B (<< party_b_name >>)
+    \item \textbf{Floating Rate Option:} << floating_rate_option >>
+    \item \textbf{Designated Maturity:} << designated_maturity >>
+    \item \textbf{Spread:} << spread >>
+    \item \textbf{Floating Rate Day Count:} << floating_day_count >>
+<<- if calculation_agent >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+<<- endif >>
+\end{itemize}
+
+<<- elif exhibit == 'II-H' >>
+\begin{center}
+    \textbf{EXHIBIT II-H} \\
+    \textit{Additional Provisions for a Mark-to-Market Currency Swap}
+\end{center}
+
+\vspace{0.3cm}
+\noindent \textbf{1.\quad General Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Termination Date:} << termination_date >>
+    \item \textbf{Constant Currency Payer:} << constant_currency_payer >>
+    \item \textbf{Constant Currency:} << constant_currency >>
+    \item \textbf{Constant Notional Amount:} << constant_notional >>
+    \item \textbf{Variable Currency Payer:} << variable_currency_payer >>
+    \item \textbf{Variable Currency:} << variable_currency >>
+<<- if currency_exchange_rate >>
+    \item \textbf{Initial Currency Exchange Rate:} << currency_exchange_rate >>
+<<- endif >>
+<<- if mtm_payment_date >>
+    \item \textbf{MTM Payment Date:} << mtm_payment_date >>
+<<- endif >>
+<<- if mtm_exchanges >>
+    \item \textbf{Exchanges:} << mtm_exchanges >>
+<<- endif >>
+<<- if calculation_agent >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+<<- endif >>
+\end{itemize}
+
+<<- elif exhibit == 'II-I' >>
+\begin{center}
+    \textbf{EXHIBIT II-I} \\
+    \textit{Additional Provisions for a Range Accrual Swap}
+\end{center}
+
+\vspace{0.3cm}
+\noindent \textbf{1.\quad General Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Termination Date:} << termination_date >>
+    \item \textbf{Notional Amount:} << notional_amount >>
+<<- if calculation_agent >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{2.\quad Range Accrual Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Floating Rate Formula:} << range_accrual_formula >>
+    \item \textbf{Lower Barrier Rate:} << lower_barrier_rate >>
+    \item \textbf{Upper Barrier Rate:} << upper_barrier_rate >>
+    \item \textbf{Reference Rate Floating Rate Option:} << reference_rate_fro >>
+    \item \textbf{Fixed Amount Payer:} Party A (<< party_a_name >>)
+    \item \textbf{Fixed Rate:} << fixed_rate_or_amount >>
+    \item \textbf{Day Count Fraction:} << fixed_day_count >>
+\end{itemize}
+
+<<- elif exhibit == 'II-J' >>
+\begin{center}
+    \textbf{EXHIBIT II-J} \\
+    \textit{Additional Provisions for a Floating-to-Floating Rate Swap}
+\end{center}
+
+\vspace{0.3cm}
+\noindent \textbf{1.\quad General Terms:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Trade Date:} << trade_date >>
+    \item \textbf{Effective Date:} << effective_date >>
+    \item \textbf{Termination Date:} << termination_date >>
+    \item \textbf{Notional Amount:} << notional_amount >>
+<<- if calculation_agent >>
+    \item \textbf{Calculation Agent:} << calculation_agent >>
+<<- endif >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{2.\quad Floating Leg I:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Floating Amount Payer:} << floating_payer_1 >>
+    \item \textbf{Floating Rate Option:} << floating_fro_1 >>
+    \item \textbf{Designated Maturity:} << designated_maturity_1 >>
+    \item \textbf{Spread:} << spread_1 >>
+    \item \textbf{Day Count Fraction:} << floating_day_count_1 >>
+    \item \textbf{Payment Dates:} << floating_payment_dates_1 >>
+    \item \textbf{Reset Dates:} << reset_dates_1 >>
+\end{itemize}
+
+\vspace{0.3cm}
+\noindent \textbf{3.\quad Floating Leg II:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Floating Amount Payer:} << floating_payer_2 >>
+    \item \textbf{Floating Rate Option:} << floating_fro_2 >>
+    \item \textbf{Designated Maturity:} << designated_maturity_2 >>
+    \item \textbf{Spread:} << spread_2 >>
+    \item \textbf{Day Count Fraction:} << floating_day_count_2 >>
+    \item \textbf{Payment Dates:} << floating_payment_dates_2 >>
+    \item \textbf{Reset Dates:} << reset_dates_2 >>
+\end{itemize}
+
+<<- endif >>
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+% ======================================================================
+% OPTIONAL - EXHIBIT II-F OR II-G
+% ======================================================================
+
+<<- if termination_type == 'Optional' >>
+\begin{center}
+    \textbf{EXHIBIT II-F} \\
+    \textit{Additional Provisions for Optional Early Termination}
+\end{center}
+
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Optional Early Termination:} Applicable
+    \item \textbf{Option Style:} << early_term_option_style >>
+<<- if early_term_date >>
+    \item \textbf{Optional Early Termination Date:} << early_term_date >>
+<<- endif >>
+<<- if early_term_seller_buyer >>
+    \item \textbf{Seller / Buyer:} << early_term_seller_buyer >>
+<<- endif >>
+    \item \textbf{Cash Settlement Method:} << early_term_cash_settlement >>
+\end{itemize}
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+<<- elif termination_type == 'Mandatory' >>
+\begin{center}
+    \textbf{EXHIBIT II-G} \\
+    \textit{Additional Provisions for Mandatory Early Termination}
+\end{center}
+
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+    \item \textbf{Mandatory Early Termination:} Applicable
+    \item \textbf{Mandatory Early Termination Date:} << mandatory_term_date >>
+    \item \textbf{Cash Settlement Method:} << mandatory_cash_settlement >>
+\end{itemize}
+
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+<<- endif >>
+
+% ======================================================================
+% OPTIONAL - CUSTOM CLAUSES
+% ======================================================================
+
+<<- if custom_clauses >>
+\noindent \textbf{Additional Provisions:}
+\vspace{0.2cm}
+
+<<- for clause in custom_clauses >>
+\noindent \textbf{<< clause.title >>:} << clause.description >>
+
+\vspace{0.2cm}
+<<- endfor >>
+\vspace{0.3cm}
+\hrule
+\vspace{0.5cm}
+<<- endif >>
+
+% ======================================================================
+% OPTIONAL - LOGISTICS
+% ======================================================================
+
+<<- if party_a_accounts or party_b_accounts >>
+\noindent \textbf{Account Details:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_accounts >>
+    \item Account(s) for payments to Party A: << party_a_accounts >>
+<<- endif >>
+<<- if party_b_accounts >>
+    \item Account(s) for payments to Party B: << party_b_accounts >>
+<<- endif >>
+\end{itemize}
+\vspace{0.3cm}
+<<- endif >>
+
+<<- if party_a_office or party_b_office >>
+\noindent \textbf{Offices:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_office >>
+    \item The Office of Party A for the Transaction is: << party_a_office >>
+<<- endif >>
+<<- if party_b_office >>
+    \item The Office of Party B for the Transaction is: << party_b_office >>
+<<- endif >>
+\end{itemize}
+\vspace{0.3cm}
+<<- endif >>
+
+<<- if party_a_notice_details or party_b_notice_details >>
+\noindent \textbf{Contact Details for Notice:}
+\begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
+<<- if party_a_notice_details >>
+    \item Party A: << party_a_notice_details >>
+<<- endif >>
+<<- if party_b_notice_details >>
+    \item Party B: << party_b_notice_details >>
+<<- endif >>
+\end{itemize}
+\vspace{0.3cm}
+<<- endif >>
+
+<<- if broker_arranger_details >>
+\noindent \textbf{Broker / Arranger:} << broker_arranger_details >>
+\vspace{0.3cm}
+<<- endif >>
+
+<<- if credit_support_provider >>
+\noindent \textbf{Credit Support:} \textbf{<< credit_support_provider >>} agrees to provide the following Credit Support Document: \textbf{<< credit_support_document >>}
+\vspace{0.3cm}
+<<- endif >>
+
+\vspace{1cm}
+
+% ======================================================================
+% EXHIBIT I - CLOSING AND SIGNATURES (ALWAYS PRESENT)
+% ======================================================================
+
+\noindent Please confirm that the foregoing correctly sets forth the terms of our agreement by executing the copy of this Confirmation enclosed for that purpose and returning it to us or by sending to us a confirmation substantially similar to this Confirmation, which confirmation sets forth the material terms of the Transaction to which this Confirmation relates and indicates your agreement to those terms.
+
+\vspace{2cm}
+
+\noindent
+\begin{tabular}{@{}p{0.46\linewidth} p{0.06\linewidth} p{0.46\linewidth}@{}}
+Yours faithfully, & & Confirmed as of the date first above written: \\[0.8cm]
+\textbf{<< party_a_name >>} & & \textbf{<< party_b_name >>} \\[0.8cm]
+By: \makebox[2in]{\hrulefill} & & By: \makebox[2in]{\hrulefill} \\[0.5cm]
+Name: \makebox[2in]{\hrulefill} & & Name: \makebox[2in]{\hrulefill} \\[0.5cm]
+Title: \textbf{<< party_a_signatory_title >>} & & Title: \textbf{<< party_b_signatory_title >>} \\[0.5cm]
+Date: \makebox[2in]{\hrulefill} & & Date: \makebox[2in]{\hrulefill} \\
+\end{tabular}
+
+\end{document}

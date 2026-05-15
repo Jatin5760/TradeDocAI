@@ -1,0 +1,82 @@
+# ============================================================
+# TradeDoc AI — .dockerignore
+# Keeps the build context lean — exclude everything not needed
+# ============================================================
+
+# ── Secrets ────────────────────────────────────────────────
+# Never bake runtime secrets into the image. Docker Compose reads
+# the host .env file and passes values through environment variables.
+.env
+.env.*
+!.env.example
+
+# ── Git ─────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Large archive files ─────────────────────────────────────
+*.tar
+*.zip
+*.gz
+*.tgz
+
+# ── Python cache ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.Python
+
+# ── Virtual environments ────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Node.js — use Docker layer cache instead ────────────────
+ui-app/node_modules/
+ui-app/.next/
+# NOTE: ui-app/out/ is rebuilt inside Docker — exclude pre-built
+ui-app/out/
+
+# ── Generated PDFs (use Docker volume instead) ──────────────
+output_confirmations/
+
+# ── LaTeX auxiliary files ───────────────────────────────────
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+
+# ── IDE / OS ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Documentation (not needed at runtime) ──────────────────
+*.md
+API_INTEGRATION_GUIDE.md
+PROJECT_INDEX.md
+QUICK_START.md
+UI_BUILD_SUMMARY.md
+
+# ── MiKTeX package list (Windows only) ─────────────────────
+miktexpackages.txt
+
+# ── Test files ──────────────────────────────────────────────
+test\ cases/
+test\ cases.zip
+
+# ── Old Flask UI (replaced by ui-app) ───────────────────────
+ui/
+
+# ── Gemini AI tool data ─────────────────────────────────────
+.gemini/
+.dockerimage

@@ -1,0 +1,67 @@
+{
+    "exhibit": "II-B",
+
+    "party_a_name": "Deutsche Bank AG",
+    "party_a_lei": "7LTWFZYICNSX8D621K86",
+    "party_a_attn": "Attn: Derivatives Documentation",
+    "party_a_address": "Winchester House, 1 Great Winchester Street, London EC2N 2DB",
+    "party_a_office": "London",
+    "party_a_accounts": "As notified by Party A in writing",
+    "party_a_signatory_title": "Authorised Signatory",
+    "party_a_notice_details": "",
+
+    "party_b_name": "Barclays Bank PLC",
+    "party_b_lei": "G5GSEF7VJP5I7OUK5573",
+    "party_b_attn": "Attn: Interest Rate Derivatives Desk",
+    "party_b_address": "1 Churchill Place, London E14 5HP",
+    "party_b_office": "London",
+    "party_b_accounts": "As notified by Party B in writing",
+    "party_b_signatory_title": "Authorised Signatory",
+    "party_b_notice_details": "",
+
+    "confirmation_date": "10 March 2026",
+    "transaction_title": "Interest Rate Cap Transaction",
+    "isda_agreement_date": "01 June 2019",
+
+    "notional_amount": "EUR 75,000,000",
+    "trade_date": "10 March 2026",
+    "effective_date": "12 March 2026",
+    "termination_date": "12 March 2029",
+    "holiday_adjustment": "Applicable",
+    "calculation_agent": "Party A",
+    "notification_deadline": "",
+
+    "cap_floor_collar_type": "Cap",
+    "cap_floor_rate": "4.50% per annum",
+    "cap_floating_payer": "Party A (Deutsche Bank AG)",
+    "cap_floating_rate_option": "EUR-EURIBOR-Reuters",
+    "cap_day_count": "Actual/360",
+    "cap_payment_dates": "12th day of March, June, September and December each year, commencing 12 June 2026, subject to Modified Following Business Day Convention",
+    "floor_rate": "",
+    "collar_fixed_payer": "",
+
+    "termination_type": "Optional",
+    "early_term_option_style": "European",
+    "early_term_date": "12 March 2028",
+    "early_term_seller_buyer": "Seller: Party A (Deutsche Bank AG) / Buyer: Party B (Barclays Bank PLC)",
+    "early_term_cash_settlement": "Mid-Market Indicative Quotations",
+
+    "custom_clauses": [
+        {
+            "title": "Business Day Convention",
+            "description": "Modified Following, with TARGET Settlement Day and London as the relevant Business Day centers for all payment and reset date calculations."
+        },
+        {
+            "title": "Cap Premium",
+            "description": "Party B shall pay to Party A a premium of EUR 450,000 on the Effective Date in consideration for the Cap Transaction documented herein."
+        },
+        {
+            "title": "Governing Law",
+            "description": "This Confirmation and any non-contractual obligations arising out of or in connection with it shall be governed by and construed in accordance with English law."
+        }
+    ],
+
+    "broker_arranger_details": "",
+    "credit_support_provider": "",
+    "credit_support_document": ""
+}
