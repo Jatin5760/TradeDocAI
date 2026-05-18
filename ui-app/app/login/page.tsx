@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import Link from 'next/link';
+import { motion } from 'framer-motion';
 import { API_BASE, storeSession } from '../../lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
-  const showDemoCredentials = process.env.NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS === 'true';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -31,7 +32,7 @@ export default function LoginPage() {
         return;
       }
       storeSession(body.token, body.user);
-      router.push('/dashboard');
+      router.push('/');
     } catch {
       setError('Backend unavailable. Please start the Flask server.');
       setIsLoading(false);
@@ -44,111 +45,185 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="bg-background text-foreground min-h-screen flex flex-col">
+    <div className="min-h-[100dvh] bg-[#f8f9fc] font-body flex flex-col relative overflow-hidden">
+      {/* Subtle decorative gradient orbs — matching landing page aesthetic */}
+      <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-indigo-100/25 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] bg-slate-200/30 rounded-full blur-[100px] pointer-events-none" />
 
+      {/* Back link */}
+      <div className="relative z-10 px-4 sm:px-6 pt-6">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-500 transition-colors duration-200"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Home
+        </Link>
+      </div>
 
-      <div className="flex-1 flex items-center justify-center px-6 py-20">
-        <div className="w-full max-w-md space-y-8">
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold">Welcome Back</h1>
-            <p className="text-foreground-secondary">Sign in to your TradeDocAI account</p>
-          </div>
-
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-6">
-            {/* Email */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">Email Address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors bg-background"
-              />
-            </div>
-
-            {/* Password */}
-	            <div className="space-y-2">
-	              <div className="flex items-center justify-between">
-	                <label className="block text-sm font-medium text-foreground">Password</label>
-	              </div>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-4 py-3 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors bg-background"
-              />
-            </div>
-
-            {/* Error Message */}
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-	            {showDemoCredentials && (
-	              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-	                <p className="text-sm text-blue-900 font-medium mb-2">Demo Mode Active</p>
-	                <p className="text-sm text-blue-800 mb-3">
-	                  Use the demo account to explore all features:
-	                </p>
-	                <code className="text-xs bg-white px-2 py-1 rounded border border-blue-200 block mb-2">
-	                  demo@tradedoc.ai / demo123
-	                </code>
-	                <button
-	                  type="button"
-	                  onClick={handleDemoLogin}
-	                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-	                >
-	                  Auto-fill Demo Credentials
-	                </button>
-	              </div>
-	            )}
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full px-4 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </form>
-
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-background text-foreground-secondary">Don&apos;t have an account?</span>
-            </div>
-          </div>
-
-          {/* Sign Up Link */}
-          <Link
-            href="/signup"
-            className="block w-full text-center px-4 py-3 border-2 border-primary text-primary rounded-lg font-semibold hover:bg-primary/5 transition-colors"
+      {/* Main content */}
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 py-12 relative z-10">
+        <motion.div
+          className="w-full max-w-md"
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        >
+          {/* Logo */}
+          <motion.div
+            className="flex justify-center mb-8"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
           >
-            Create Account
-          </Link>
+            <div className="relative w-20 h-20 drop-shadow-lg">
+              <Image
+                src="/logo.svg"
+                alt="TradeDocAI Logo"
+                width={80}
+                height={80}
+                className="object-contain brightness-0"
+                priority
+              />
+            </div>
+          </motion.div>
 
-          {/* Footer */}
-          <p className="text-center text-sm text-foreground-secondary">
-            By signing in, you agree to our{' '}
-            <Link href="#" className="text-primary hover:text-primary-dark">
-              Terms of Service
-            </Link>{' '}
-            and{' '}
-            <Link href="#" className="text-primary hover:text-primary-dark">
-              Privacy Policy
-            </Link>
-          </p>
-        </div>
+          {/* Card */}
+          <div className="relative">
+            {/* Card body — plain white, matching landing page card style */}
+            <div className="relative rounded-[24px] border border-slate-100 bg-white shadow-[0_8px_20px_rgb(0,0,0,0.04)] p-8 sm:p-10">
+              {/* Top highlight line */}
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent opacity-80" />
+
+              {/* Heading */}
+              <div className="text-center mb-8">
+                <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-indigo-500 mb-3 bg-indigo-50 px-4 py-1.5 rounded-full">
+                  Welcome Back
+                </span>
+                <h1 className="font-display text-2xl sm:text-3xl text-slate-800 mb-2 tracking-tight">
+                  Sign In
+                </h1>
+                <p className="text-sm text-slate-500">Access your TradeDocAI account</p>
+              </div>
+
+              {/* Form */}
+              <form onSubmit={handleLogin} className="space-y-5">
+                {/* Email */}
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-slate-700">Email Address</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/50 transition-all duration-200 text-slate-800 placeholder:text-slate-400 text-sm"
+                  />
+                </div>
+
+                {/* Password */}
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-slate-700">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/50 transition-all duration-200 text-slate-800 placeholder:text-slate-400 text-sm"
+                  />
+                </div>
+
+                {/* Error Message */}
+                {error && (
+                  <motion.div
+                    className="p-4 bg-red-50 border border-red-100 text-red-700 rounded-xl text-sm"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {error}
+                  </motion.div>
+                )}
+
+                {/* Demo credentials */}
+                <motion.div
+                  className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  <p className="text-sm text-indigo-900 font-semibold mb-2">Demo Mode Active</p>
+                  <p className="text-sm text-indigo-800 mb-3">
+                    Use the demo account to explore all features:
+                  </p>
+                  <code className="text-xs bg-white px-2.5 py-1.5 rounded-lg border border-indigo-100 block mb-2 text-indigo-700 font-mono">
+                    demo@tradedoc.ai / demo123
+                  </code>
+                  <button
+                    type="button"
+                    onClick={handleDemoLogin}
+                    className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition-colors duration-200"
+                  >
+                    Auto-fill Demo Credentials
+                  </button>
+                </motion.div>
+
+                {/* Submit Button */}
+                <motion.button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full px-4 py-3.5 bg-indigo-500 text-white rounded-xl font-semibold hover:bg-indigo-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/25 hover:shadow-xl hover:shadow-indigo-500/30 text-sm"
+                  whileTap={{ scale: 0.985 }}
+                >
+                  {isLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Signing in...
+                    </span>
+                  ) : (
+                    'Sign In'
+                  )}
+                </motion.button>
+              </form>
+
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-100"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-3 bg-white text-slate-400 text-xs">
+                    Don't have an account?
+                  </span>
+                </div>
+              </div>
+
+              {/* Sign Up Link */}
+              <Link
+                href="/signup"
+                className="block w-full text-center px-4 py-3 border-2 border-indigo-300/60 text-indigo-500 rounded-xl font-semibold hover:bg-indigo-50/50 transition-all duration-200 text-sm"
+              >
+                Create Account
+              </Link>
+
+              {/* Footer */}
+              <p className="text-center text-xs text-slate-400 mt-6">
+                By signing in, you agree to our{' '}
+                <Link href="#" className="text-indigo-500 hover:text-indigo-600 transition-colors">
+                  Terms of Service
+                </Link>{' '}
+                and{' '}
+                <Link href="#" className="text-indigo-500 hover:text-indigo-600 transition-colors">
+                  Privacy Policy
+                </Link>
+              </p>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );

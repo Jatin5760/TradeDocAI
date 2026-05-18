@@ -18,8 +18,8 @@ export default function Comparison() {
                     viewport={{ once: true }}
                     transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
                 >
-                    <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-6xl text-slate-900 tracking-tight leading-tight flex flex-wrap items-center justify-center gap-3 lg:gap-4">
-                        <span className="bg-[#4f46e5] text-white px-4 sm:px-6 py-2 rounded-[20px] shadow-xl shadow-indigo-100 inline-block">TradeDocAI</span>
+                    <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-5xl text-slate-800 tracking-tight leading-tight flex flex-wrap items-center justify-center gap-3 lg:gap-4">
+                        <span className="bg-[#4f46e5] text-white px-3 sm:px-5 py-1.5 rounded-[20px] shadow-xl shadow-indigo-100 inline-block">TradeDocAI</span>
                         <span>vs Manual Process</span>
                     </h2>
                 </motion.div>

@@ -105,7 +105,7 @@ export default function SupportedDocs() {
             {/* ── MOBILE VIEW (Auto Slider, no scroll-linked horizontal) ── */}
             <div className="block sm:hidden px-4 py-16 overflow-hidden">
                 <div className="text-center mb-10">
-                    <h2 className="font-display text-2xl text-slate-800 font-bold mb-2">
+                    <h2 className="font-display text-2xl text-slate-800 mb-2">
                         Document Types We Process
                     </h2>
                     <p className="text-slate-400 text-sm">Swipe or wait to explore each instrument</p>
@@ -180,7 +180,7 @@ export default function SupportedDocs() {
                 <div className="sticky top-0 h-dvh overflow-hidden flex flex-col justify-center">
                     
                     <div className="text-center pt-0 md:pt-0 lg:pt-24 pb-2 px-6">
-                        <h2 className="font-display text-3xl md:text-4xl lg:text-5xl text-slate-800 font-bold">
+                        <h2 className="font-display text-3xl md:text-4xl lg:text-5xl text-slate-800">
                             Document Types We Process
                         </h2>
                         <p className="text-slate-400 mt-2 text-sm">Scroll to explore each instrument →</p>

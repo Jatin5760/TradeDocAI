@@ -194,7 +194,7 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
         });
         if (response.status === 401) {
           clearSession();
-          router.push('/login');
+          router.push('/');
           return;
         }
         if (!response.ok) return;
@@ -280,7 +280,7 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
 
       if (response.status === 401) {
         clearSession();
-        router.push('/login');
+        router.push('/');
         return;
       }
 

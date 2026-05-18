@@ -14,9 +14,32 @@ interface CustomPDFViewerProps {
   onClose: () => void;
   onDownload: () => void;
   onPrint: () => void;
+  // Phase 2: Enhanced context-aware toolbar props
+  isAiCreated: boolean;
+  hasExistingReport: boolean;
+  validationStatus?: 'pending' | 'verified';
+  onGenerateValidation: () => void;
+  onViewCurrentReport: () => void;
+  onConvertToWord: () => void;
+  generatingValidation?: boolean;
+  showValidateOnPdf?: boolean;
 }
 
-export default function CustomPDFViewer({ pdfUrl, filename, onClose, onDownload, onPrint }: CustomPDFViewerProps) {
+export default function CustomPDFViewer({
+  pdfUrl,
+  filename,
+  onClose,
+  onDownload,
+  onPrint,
+  isAiCreated,
+  hasExistingReport,
+  validationStatus,
+  onGenerateValidation,
+  onViewCurrentReport,
+  onConvertToWord,
+  generatingValidation,
+  showValidateOnPdf,
+}: CustomPDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
@@ -47,28 +70,87 @@ export default function CustomPDFViewer({ pdfUrl, filename, onClose, onDownload,
           <button onClick={zoomIn} className="p-2 hover:bg-white hover:shadow-sm rounded-lg transition-all text-slate-500"><svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"/></svg></button>
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* Right: Context-Aware Action Buttons */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+          {/* Generate Validation Report — only for AI docs */}
+          {isAiCreated && showValidateOnPdf && (
+            <button
+              onClick={onGenerateValidation}
+              disabled={generatingValidation}
+              className="px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs sm:text-sm font-bold hover:bg-amber-100 transition-colors shadow-sm disabled:opacity-50 whitespace-nowrap"
+              title="Generate Validation Report"
+            >
+              {generatingValidation ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  Validating...
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  Gen Validation Report
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* View Current Validation Report — only for AI docs with existing report */}
+          {isAiCreated && hasExistingReport && (
+            <button
+              onClick={onViewCurrentReport}
+              className="px-3 py-2 rounded-xl bg-violet-50 border border-violet-200 text-violet-700 text-xs sm:text-sm font-bold hover:bg-violet-100 transition-colors shadow-sm whitespace-nowrap"
+              title="View Current Validation Report"
+            >
+              <span className="flex items-center gap-1.5">
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                View Current Report
+              </span>
+            </button>
+          )}
+
+          {/* Convert to Word */}
           <button
-            onClick={onClose}
-            className="w-11 h-11 bg-slate-50 text-slate-500 rounded-xl flex items-center justify-center hover:bg-slate-200 transition-all shadow-sm"
-            title="Close"
+            onClick={onConvertToWord}
+            className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 text-xs sm:text-sm font-bold hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm whitespace-nowrap"
+            title="Convert to Word"
           >
-            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+            <span className="flex items-center gap-1.5">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Convert to Word
+            </span>
           </button>
-          <button 
-            onClick={onPrint}
-            className="w-11 h-11 bg-slate-50 text-slate-500 rounded-xl flex items-center justify-center hover:bg-slate-200 transition-all shadow-sm"
-            title="Print"
-          >
-            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-          </button>
-          <button 
+
+          {/* Download PDF */}
+          <button
             onClick={onDownload}
-            className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+            className="px-3 py-2 rounded-xl bg-emerald-50 text-emerald-600 text-xs sm:text-sm font-bold hover:bg-emerald-600 hover:text-white transition-all shadow-sm whitespace-nowrap"
             title="Download PDF"
           >
-            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span className="flex items-center gap-1.5">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download PDF
+            </span>
+          </button>
+
+          {/* Separator before utility buttons */}
+          <span className="w-px h-6 bg-slate-200 mx-1" />
+
+          {/* Print */}
+          <button
+            onClick={onPrint}
+            className="w-9 h-9 bg-slate-50 text-slate-500 rounded-xl flex items-center justify-center hover:bg-slate-200 transition-all shadow-sm shrink-0"
+            title="Print"
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          </button>
+
+          {/* Close */}
+          <button
+            onClick={onClose}
+            className="w-9 h-9 bg-slate-50 text-slate-500 rounded-xl flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all shadow-sm shrink-0"
+            title="Close"
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
       </div>

@@ -5,6 +5,7 @@
 # ── Secrets ─────────────────────────────────────────────────
 .env
 !.env.example
+gcs-service-account.json
 
 # ── Python ──────────────────────────────────────────────────
 __pycache__/
@@ -70,5 +71,6 @@ test cases/
 # ── Bench / scratch outputs ──────────────────────────────────
 _bench_out/
 scratch/
-
+test/
+pytest.ini
 External files not the part of project/

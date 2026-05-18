@@ -33,15 +33,21 @@ def _get_client():
     return _client
 
 
-def call_gemini(prompt: str, max_retries: int = 5, model_name: str = None) -> str:
+def call_gemini(prompt: str, max_retries: int = 5, model_name: str | None = None, generation_config: dict | None = None) -> str:
     """
     Call Gemini for text-only tasks.
     Returns the response text.
     Handles rate limits (429) and high demand (503) with retries and fallback.
+    
+    generation_config: optional dict with keys like temperature, max_output_tokens,
+                       response_mime_type (e.g. "application/json").
     """
     primary_model = model_name or MODEL
     # If the primary is a 2.x model, fallback to gemini-flash-latest if busy
     fallback_model = "gemini-flash-latest" if ("2.0" in primary_model or "2.5" in primary_model) else None
+    
+    # Build GenerateContentConfig if generation params provided
+    config = types.GenerateContentConfig(**generation_config) if generation_config else None
     
     for attempt in range(max_retries):
         use_model = primary_model
@@ -52,9 +58,10 @@ def call_gemini(prompt: str, max_retries: int = 5, model_name: str = None) -> st
         try:
             response = _get_client().models.generate_content(
                 model=use_model,
-                contents=prompt
+                contents=prompt,
+                config=config
             )
-            return response.text.strip()
+            return (response.text or "").strip()
         except Exception as e:
             error_str = str(e).upper()
             # Catching 503, 429, 500, etc.
@@ -71,7 +78,45 @@ def call_gemini(prompt: str, max_retries: int = 5, model_name: str = None) -> st
     raise Exception("Gemini API could not fulfill the request after all retries.")
 
 
-def call_gemini_with_pdf(prompt: str, pdf_path: str, max_retries: int = 3, model_name: str = None) -> str:
+def call_gemini_stream(prompt: str, model_name: str | None = None, generation_config: dict | None = None):
+    """
+    Call Gemini for text-only tasks with streaming — buffers 2-3 words per chunk
+    for smooth, fast SSE that feels like ChatGPT.
+    
+    Yields:
+        str chunks of 2-3 words each, or full lines on newline.
+    """
+    use_model = model_name or MODEL
+    config = types.GenerateContentConfig(**generation_config) if generation_config else None
+    
+    try:
+        stream = _get_client().models.generate_content_stream(
+            model=use_model,
+            contents=prompt,
+            config=config
+        )
+        buffer = ""
+        word_target = 0
+        for chunk in stream:
+            if chunk.text:
+                buffer += chunk.text
+                spaces = buffer.count(" ")
+                if spaces >= word_target:
+                    yield buffer
+                    buffer = ""
+                    word_target = 2  # batch 2-3 words
+                elif "\n" in buffer:
+                    yield buffer
+                    buffer = ""
+                    word_target = 2
+        if buffer:
+            yield buffer
+    except Exception as e:
+        print(f"  ❌ Gemini Stream Error: {e}")
+        yield f"[Error: {str(e)[:100]}]"
+
+
+def call_gemini_with_pdf(prompt: str, pdf_path: str, max_retries: int = 3, model_name: str | None = None) -> str:
     """
     Call Gemini with a PDF file.
     Handles high demand (503) and rate limits (429) with retries and fallback.
@@ -98,7 +143,7 @@ def call_gemini_with_pdf(prompt: str, pdf_path: str, max_retries: int = 3, model
                 model=use_model,
                 contents=contents
             )
-            return response.text.strip()
+            return (response.text or "").strip()
         except Exception as e:
             error_str = str(e).upper()
             is_retryable = any(msg in error_str for msg in ["429", "503", "RESOURCE_EXHAUSTED", "UNAVAILABLE", "SERVICE_UNAVAILABLE"])

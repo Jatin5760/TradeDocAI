@@ -30,7 +30,7 @@ import uuid
 import time
 import shutil
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import unquote, urlparse
 import re
@@ -40,13 +40,21 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from pymongo import MongoClient
 from pymongo.errors import ConfigurationError, PyMongoError, ServerSelectionTimeoutError
-from flask import Flask, g, request, jsonify, send_file, send_from_directory
+from flask import Flask, Response, g, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
+
+# ── Google Cloud Storage (optional) ───────
+try:
+    from google.cloud import storage  # type: ignore[import-untyped]
+    GCS_AVAILABLE = True
+except ImportError:
+    GCS_AVAILABLE = False
+    storage = None  # type: ignore[assignment]
 
 try:
     import certifi
@@ -63,7 +71,7 @@ sys.path.insert(0, os.path.join(ROOT_DIR, "templates", "Equity_TRS"))
 
 # Import LangGraph flows
 from agents.graph import ai_create_graph, pdf_compile_graph, validation_graph
-from agents.gemini_helper import call_gemini
+from agents.gemini_helper import call_gemini, call_gemini_stream
 
 # Import raw generators as fallback for direct PDF compilation
 # Lazy imports with fallbacks — prevents entire server from crashing
@@ -130,6 +138,89 @@ os.makedirs(TEMP_PDF_DIR, exist_ok=True)
 PDF_RETENTION_SECONDS = int(float(os.environ.get("PDF_RETENTION_HOURS", "24")) * 60 * 60)
 PDF_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("PDF_CLEANUP_INTERVAL_SECONDS", "3600"))
 _last_pdf_cleanup = 0.0
+
+# ── Google Cloud Storage ──────────────────
+GCS_BUCKET_NAME = os.environ.get("GCS_BUCKET_NAME", "")
+GCS_CREDENTIALS_PATH = os.path.abspath(
+    os.environ.get(
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        os.path.join(ROOT_DIR, "gcs-service-account.json"),
+    )
+)
+GCS_SIGNED_URL_EXPIRY_MINUTES = int(os.environ.get("GCS_SIGNED_URL_EXPIRY_MINUTES", "15"))
+_gcs_client = None
+
+
+def _storage_client():
+    """Lazy-init singleton for GCS client. Returns None if GCS is not configured."""
+    global _gcs_client
+    if not GCS_AVAILABLE:
+        return None
+    if _gcs_client is None:
+        if not GCS_BUCKET_NAME:
+            print("  ⚠️  GCS_BUCKET_NAME not set — GCS archival disabled")
+            return None
+        if not os.path.exists(GCS_CREDENTIALS_PATH):
+            print(f"  ⚠️  GCS credentials not found at {GCS_CREDENTIALS_PATH} — GCS archival disabled")
+            return None
+        _gcs_client = storage.Client.from_service_account_json(GCS_CREDENTIALS_PATH)  # type: ignore[union-attr]
+    return _gcs_client
+
+
+def _upload_to_gcs(local_pdf_path: str, user_id: str, doc_type: str) -> str | None:
+    """Upload a PDF to Google Cloud Storage. Returns the GCS object path or None on failure."""
+    client = _storage_client()
+    if not client:
+        return None
+    try:
+        bucket = client.bucket(GCS_BUCKET_NAME)
+        filename = os.path.basename(local_pdf_path)
+        object_path = f"{user_id}/{doc_type}/{filename}"
+        blob = bucket.blob(object_path)
+        blob.upload_from_filename(local_pdf_path, content_type="application/pdf")
+        print(f"  ☁️  Uploaded to GCS: gs://{GCS_BUCKET_NAME}/{object_path}")
+        return object_path
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def _download_from_gcs(gcs_object_path: str) -> bytes | None:
+    """Download PDF bytes from GCS. Returns None on failure."""
+    client = _storage_client()
+    if not client:
+        return None
+    try:
+        bucket = client.bucket(GCS_BUCKET_NAME)
+        blob = bucket.blob(gcs_object_path)
+        if not blob.exists():
+            return None
+        return blob.download_as_bytes()
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def _generate_gcs_signed_url(gcs_object_path: str) -> str | None:
+    """Generate a time-limited signed URL for a GCS object."""
+    client = _storage_client()
+    if not client:
+        return None
+    try:
+        bucket = client.bucket(GCS_BUCKET_NAME)
+        blob = bucket.blob(gcs_object_path)
+        if not blob.exists():
+            return None
+        return blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(minutes=GCS_SIGNED_URL_EXPIRY_MINUTES),
+            method="GET",
+            response_disposition="inline",
+        )
+    except Exception:
+        traceback.print_exc()
+        return None
+
 
 # ── Auth ──────────────────────────────────
 AUTH_SECRET = os.environ.get("AUTH_SECRET") or os.environ.get("SECRET_KEY")
@@ -216,7 +307,9 @@ def require_auth(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if request.method == "OPTIONS":
-            return fn(*args, **kwargs)
+            # Return 200 OK for CORS preflight — never forward to the view
+            # (the view may run DB queries that could fail and return non-200)
+            return "", 200
         user = _current_user_from_request()
         if not user:
             return jsonify({"error": "Authentication required"}), 401
@@ -570,7 +663,7 @@ def _make_job_dir() -> tuple[str, str]:
 
 
 def _file_id(job_id: str, filename: str) -> str:
-    return f"{job_id}:{secure_filename(filename)}"
+    return f"{job_id}:{filename}"
 
 
 def _resolve_generated_pdf(body: dict) -> tuple[str | None, str | None]:
@@ -580,11 +673,25 @@ def _resolve_generated_pdf(body: dict) -> tuple[str | None, str | None]:
     if file_id and ":" in file_id:
         job_id, filename = file_id.split(":", 1)
         job_id = secure_filename(job_id)
-        filename = secure_filename(filename)
-        pdf_path = os.path.abspath(os.path.join(TEMP_PDF_DIR, user_id, job_id, filename))
+        job_dir = os.path.abspath(os.path.join(TEMP_PDF_DIR, user_id, job_id))
         allowed_root = os.path.abspath(os.path.join(TEMP_PDF_DIR, user_id))
-        if pdf_path.startswith(allowed_root + os.sep) and os.path.exists(pdf_path):
+        # Try the raw filename as stored (new format — _file_id no longer secures)
+        pdf_path = os.path.join(job_dir, filename)
+        if os.path.exists(pdf_path) and pdf_path.startswith(allowed_root + os.sep):
             return pdf_path, filename
+        # Fallback: try secure_filename version (legacy docs stored with secured names)
+        filename_secured = secure_filename(filename)
+        if filename_secured != filename:
+            pdf_path = os.path.join(job_dir, filename_secured)
+            if os.path.exists(pdf_path) and pdf_path.startswith(allowed_root + os.sep):
+                return pdf_path, filename_secured
+        # Last resort: find any PDF in the job directory
+        if os.path.isdir(job_dir):
+            pdfs = sorted([f for f in os.listdir(job_dir) if f.lower().endswith(".pdf")])
+            if pdfs:
+                pdf_path = os.path.join(job_dir, pdfs[0])
+                if pdf_path.startswith(allowed_root + os.sep):
+                    return pdf_path, pdfs[0]
 
     legacy_name = secure_filename(body.get("pdf_filename", ""))
     if not legacy_name:
@@ -812,16 +919,99 @@ def api_chat():
         if not user_msg:
             return jsonify({"error": "Message is required"}), 400
 
+        doc_type = body.get("doc_type")
+        schema = body.get("schema")
+        current_data = body.get("current_data")
+        scope = body.get("scope", "global")  # "local" = ChatSidebar form assistant, "global" = ChatCopilot
+        stream = body.get("stream", False)   # SSE streaming for ChatGPT-like real-time output
+
+        # ── Local Scope (ChatSidebar — no DB, no session) ──
+        if scope == "local" and doc_type and schema:
+            msg_lower = user_msg.lower()
+
+            # Detect intent: missing fields
+            is_missing_check = any(kw in msg_lower for kw in [
+                "what's missing", "whats missing", "what is missing",
+                "missing fields", "remaining", "still need", "left to fill",
+                "not filled", "empty fields", "what else", "what do i need"
+            ])
+            # Detect intent: mistake_check (only review filled, never mention missing)
+            is_mistake_check = any(kw in msg_lower for kw in [
+                "check", "mistake", "review", "verify", "error",
+                "wrong", "correct", "any issues", "look over"
+            ]) and not is_missing_check  # Don't route "what's missing" to mistake check
+            # Detect intent: field_explain
+            is_field_explain = any(kw in msg_lower for kw in [
+                "what does", "what is", "explain", "mean",
+                "definition", "define", "purpose of"
+            ])
+
+            if is_missing_check and current_data is not None:
+                from agents.assistant_agent import build_missing_fields_prompt
+                prompt = build_missing_fields_prompt(doc_type, current_data, schema)
+                if prompt is None:
+                    # No missing required fields — craft a simple response
+                    reply = "All required fields are filled. You're good to go!"
+                    if not stream:
+                        return jsonify({"reply": reply, "action": None, "session": None, "message": None})
+                    def generate_empty():
+                        yield f"data: {json.dumps({'token': reply})}\n\n"
+                        yield f"data: {json.dumps({'done': True, 'reply': reply, 'action': None})}\n\n"
+                    return Response(generate_empty(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"})
+            elif is_mistake_check and current_data:
+                from agents.assistant_agent import build_mistake_check_prompt
+                prompt = build_mistake_check_prompt(doc_type, current_data, schema)
+            elif is_field_explain:
+                from agents.assistant_agent import build_field_explain_prompt
+                prompt = build_field_explain_prompt(doc_type, user_msg, schema)
+            else:
+                # Generic local query — use existing assistant prompt with empty history
+                from agents.assistant_agent import build_assistant_prompt
+                prompt = build_assistant_prompt(user_msg, doc_type, schema, current_data or {}, [])
+
+            # ── SSE Streaming path ──
+            if stream:
+                def generate():
+                    full_text = ""
+                    try:
+                        for chunk in call_gemini_stream(prompt, model_name="gemini-flash-latest"):
+                            full_text += chunk
+                            yield f"data: {json.dumps({'token': chunk})}\n\n"
+                        # Send final message with cleaned full text + action extraction
+                        clean_text, action = _extract_chat_action(full_text, user_msg)
+                        yield f"data: {json.dumps({'done': True, 'reply': clean_text, 'action': action})}\n\n"
+                    except Exception as e:
+                        yield f"data: {json.dumps({'error': str(e)[:200]})}\n\n"
+
+                return Response(
+                    generate(),
+                    mimetype="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no",
+                        "Connection": "keep-alive",
+                    }
+                )
+
+            # ── Non-streaming path (fallback) ──
+            reply = call_gemini(prompt, model_name="gemini-flash-latest")
+            reply, _ = _extract_chat_action(reply, user_msg)
+
+            return jsonify({
+                "reply": reply,
+                "action": None,
+                "session": None,
+                "message": None,
+            })
+
+        # ── Global Scope (ChatCopilot — existing flow with DB) ──
         db = get_db()
         session = _chat_session_for_user(db, body.get("session_id"))
         if not session:
             session = _create_chat_session(db, user_msg)
 
         history = _load_chat_history(db, session["_id"])
-        
-        doc_type = body.get("doc_type")
-        schema = body.get("schema")
-        current_data = body.get("current_data")
 
         # 1. Fast-Track Navigation (Skip LLM for simple "go to" commands)
         fast_action = _detect_fast_navigation(user_msg)
@@ -947,7 +1137,17 @@ def api_save_document():
             return jsonify({"error": "Unsupported document type"}), 400
         data = body.get("data", {})
         is_draft = bool(body.get("is_draft", True))
+        pdf_file_id = str(body.get("pdf_file_id", "")).strip() or None
 
+        # If finalizing with a pdf_file_id, try to resolve & upload to GCS
+        gcs_object_path = None
+        if not is_draft and pdf_file_id and ":" in pdf_file_id:
+            pdf_path, _ = _resolve_generated_pdf({"pdf_file_id": pdf_file_id})
+            if pdf_path and os.path.exists(pdf_path):
+                gcs_object_path = _upload_to_gcs(pdf_path, g.current_user_id, doc_type)
+
+        ai_created = bool(body.get("ai_created", False))
+        source_email = str(body.get("source_email", "")).strip()
         now = datetime.now(timezone.utc).isoformat()
         doc = {
             "user_id":    g.current_user_id,
@@ -955,12 +1155,21 @@ def api_save_document():
             "name":       str(body.get("name", "Untitled"))[:160],
             "icon":       str(body.get("icon", ""))[:16],
             "summary":    str(body.get("summary", ""))[:400],
-            "ai_created": bool(body.get("ai_created", False)),
+            "ai_created": ai_created,
             "is_draft":   is_draft,
             "data":       data,
             "created_at": now,
             "updated_at": now,
         }
+        if source_email:
+            doc["source_email"] = source_email[:10000]
+        # Set validation_status: AI-filled docs need validation, manual docs are auto-verified
+        if not is_draft:
+            doc["validation_status"] = "pending" if ai_created else "verified"
+        if pdf_file_id:
+            doc["pdf_file_id"] = pdf_file_id
+        if gcs_object_path:
+            doc["gcs_object_path"] = gcs_object_path
 
         db = get_db()
         collection = db.drafts if is_draft else db.documents
@@ -1028,8 +1237,13 @@ def api_update_document(doc_id):
             update_fields["name"] = str(body["name"])[:160]
         if "summary" in body:
             update_fields["summary"] = str(body["summary"])[:400]
+        if "pdf_file_id" in body:
+            val = str(body["pdf_file_id"]).strip()
+            if val:
+                update_fields["pdf_file_id"] = val
         
         new_is_draft = body.get("is_draft")
+        source_email = str(body.get("source_email", "")).strip()
         
         # Logic: Promotion from Draft to Final
         if not is_in_final and new_is_draft == False:
@@ -1042,16 +1256,69 @@ def api_update_document(doc_id):
             draft_doc.update(update_fields)
             draft_doc["is_draft"] = False
             
+            # Set validation_status when finalizing
+            if draft_doc.get("ai_created", False):
+                draft_doc["validation_status"] = "pending"
+            else:
+                draft_doc["validation_status"] = "verified"
+            
+            # Store source email for later validation
+            if source_email and not draft_doc.get("source_email"):
+                draft_doc["source_email"] = source_email[:10000]
+            
+            # If finalizing with a pdf_file_id, try to resolve & upload to GCS
+            pdf_id = draft_doc.get("pdf_file_id", "")
+            if pdf_id and ":" in pdf_id:
+                pdf_path, _ = _resolve_generated_pdf({"pdf_file_id": pdf_id})
+                if pdf_path and os.path.exists(pdf_path):
+                    gcs_path = _upload_to_gcs(pdf_path, g.current_user_id, draft_doc.get("doc_type", ""))
+                    if gcs_path:
+                        draft_doc["gcs_object_path"] = gcs_path
+            
             # Move to documents
             db.documents.insert_one(draft_doc)
             db.drafts.delete_one({"_id": oid})
-            print(f"  🚀 Draft promoted to Final: {doc_id}")
+            print(f"  🚀 Draft promoted to Final: {doc_id} (status: {draft_doc.get('validation_status')})")
             return jsonify(_obj_id_to_str(draft_doc))
+        
+        # Logic: Demotion from Final (Verified) back to Draft
+        # Triggered when user edits a verified trade and clicks "Save Draft"
+        if is_in_final and new_is_draft == True:
+            # Fetch existing finalized document to move
+            final_doc = db.documents.find_one({"_id": oid, "user_id": g.current_user_id})
+            if not final_doc:
+                return jsonify({"error": "Document not found"}), 404
+            
+            # Merge updates
+            final_doc.update(update_fields)
+            final_doc["is_draft"] = True
+            
+            # Clear stale PDF references — old PDF is now outdated since form data changed
+            final_doc.pop("pdf_file_id", None)
+            final_doc.pop("gcs_object_path", None)
+            
+            # Move to drafts
+            db.drafts.insert_one(final_doc)
+            db.documents.delete_one({"_id": oid})
+            print(f"  📝 Verified trade demoted to Draft: {doc_id} (form edited, PDF references cleared)")
+            return jsonify(_obj_id_to_str(final_doc))
         
         # Normal update within same collection
         current_coll = db.documents if is_in_final else db.drafts
         update_fields["is_draft"] = bool(new_is_draft) if new_is_draft is not None else (not is_in_final)  # type: ignore[assignment]
-        
+
+        # If already finalized but missing GCS path, upload PDF to cloud storage
+        if is_in_final:
+            doc = db.documents.find_one({"_id": oid, "user_id": g.current_user_id})
+            if doc and not doc.get("gcs_object_path"):
+                pdf_id = body.get("pdf_file_id", "") or update_fields.get("pdf_file_id", "")
+                if pdf_id and ":" in pdf_id:
+                    pdf_path, _ = _resolve_generated_pdf({"pdf_file_id": pdf_id})
+                    if pdf_path and os.path.exists(pdf_path):
+                        gcs_path = _upload_to_gcs(pdf_path, g.current_user_id, doc.get("doc_type", ""))
+                        if gcs_path:
+                            update_fields["gcs_object_path"] = gcs_path
+
         result = current_coll.update_one(
             {"_id": oid, "user_id": g.current_user_id},
             {"$set": update_fields}
@@ -1089,6 +1356,67 @@ def api_delete_document(doc_id):
 
 
 
+
+
+@app.route("/api/documents/<doc_id>/pdf", methods=["GET"])
+@require_auth
+def api_serve_document_pdf(doc_id):
+    """Serve the stored PDF for a finalized document. Tries temp disk first, then GCS."""
+    try:
+        db = get_db()
+        oid = ObjectId(doc_id)
+        doc = db.documents.find_one({"_id": oid, "user_id": g.current_user_id})
+        if not doc:
+            return jsonify({"error": "Document not found or not finalized"}), 404
+
+        file_id = doc.get("pdf_file_id", "")
+        if not file_id:
+            return jsonify({"error": "No PDF stored for this document"}), 404
+
+        # 1. Try to resolve from temp disk (recently generated PDFs)
+        body = {"pdf_file_id": file_id}
+        pdf_path, pdf_filename = _resolve_generated_pdf(body)
+
+        if pdf_path and os.path.exists(pdf_path):
+            return _send_pdf(pdf_path)
+
+        # 2. Fallback: try GCS (archived PDFs)
+        gcs_path = doc.get("gcs_object_path", "")
+        if gcs_path:
+            # Derive filename from file_id (job_id:filename) or GCS path
+            gcs_filename = pdf_filename
+            if not gcs_filename and ":" in file_id:
+                gcs_filename = file_id.split(":", 1)[1]
+            if not gcs_filename:
+                gcs_filename = os.path.basename(gcs_path)
+            if not gcs_filename:
+                gcs_filename = "document.pdf"
+
+            # Serve directly from backend to avoid CORS issues with cross-origin signed URLs
+            pdf_bytes = _download_from_gcs(gcs_path)
+            if pdf_bytes:
+                return Response(
+                    pdf_bytes,
+                    mimetype="application/pdf",
+                    headers={
+                        "Content-Disposition": f"inline; filename={gcs_filename}",
+                        "X-TradeDoc-File-Id": file_id,
+                    },
+                )
+
+            # Fallback: signed URL redirect (requires GCS CORS if consumed by browser)
+            signed_url = _generate_gcs_signed_url(gcs_path)
+            if signed_url:
+                return jsonify({"signed_url": signed_url, "filename": gcs_filename})
+
+        return jsonify({"error": "PDF file not found on disk or in cloud storage — may have been cleaned up"}), 404
+    except Exception as e:
+        if isinstance(e, InvalidId):
+            return jsonify({"error": "Invalid document id"}), 400
+        if isinstance(e, (ServerSelectionTimeoutError, PyMongoError)):
+            return _database_error_response(e)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 # ═══════════════════════════════════════════
@@ -1333,6 +1661,8 @@ def api_validate():
     """
     Accepts email_text + pdf_filename, runs validation agent.
     Compares the generated PDF against the original email.
+    If doc_id provided, marks the document as verified after successful validation.
+    Supports PDFs from temp disk (pdf_file_id) or GCS (gcs_object_path).
     """
     try:
         if not os.environ.get("GEMINI_API_KEY"):
@@ -1341,11 +1671,29 @@ def api_validate():
         email_text = body.get("email_text", "")
         pdf_path, pdf_filename = _resolve_generated_pdf(body)
 
+        # If not found on temp disk and gcs_object_path is provided, download from GCS
+        if (not pdf_path or not os.path.exists(pdf_path)) and body.get("gcs_object_path"):
+            gcs_path = body["gcs_object_path"]
+            pdf_bytes = _download_from_gcs(gcs_path)
+            if pdf_bytes:
+                # Save to a temp location for the validation agent to read
+                import tempfile
+                user_id = _safe_user_id()
+                tmp_dir = os.path.join(tempfile.gettempdir(), "tradedoc_validate", user_id)
+                os.makedirs(tmp_dir, exist_ok=True)
+                pdf_filename = secure_filename(body.get("pdf_filename", "confirmation.pdf"))
+                if not pdf_filename.lower().endswith(".pdf"):
+                    pdf_filename += ".pdf"
+                pdf_path = os.path.join(tmp_dir, pdf_filename)
+                with open(pdf_path, "wb") as f:
+                    f.write(pdf_bytes)
+                print(f"  📥 Downloaded PDF from GCS for validation: {pdf_filename}")
+
         if not pdf_filename:
             return jsonify({"error": "No PDF filename provided"}), 400
         if not email_text.strip():
             return jsonify({"error": "No email text provided for validation"}), 400
-        if not pdf_path:
+        if not pdf_path or not os.path.exists(pdf_path):
             return jsonify({"error": f"PDF not found: {pdf_filename}"}), 404
 
         print(f"\n{'='*55}\n  ▶ Validating PDF: {pdf_filename} against email...\n{'='*55}")
@@ -1360,13 +1708,61 @@ def api_validate():
         if result.get("error"):
             return jsonify({"error": result["error"]}), 500
 
+        # Mark document as verified + store validation report if doc_id provided
+        doc_id = body.get("doc_id", "").strip()
+        validation_report_text = result.get("validation_report", "")
+        if doc_id:
+            try:
+                db = get_db()
+                oid = ObjectId(doc_id)
+                db.documents.update_one(
+                    {"_id": oid, "user_id": g.current_user_id},
+                    {"$set": {
+                        "validation_status": "verified",
+                        "validation_report": validation_report_text,
+                        "updated_at": _iso_now()
+                    }}
+                )
+                print(f"  ✅ Document {doc_id} marked as verified with stored validation report")
+            except Exception:
+                pass  # Non-critical — validation report still returned
+
         return jsonify({
-            "validation_report": result.get("validation_report", "No report generated")
+            "validation_report": validation_report_text or "No report generated"
         })
 
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════
+# VALIDATION REPORT RETRIEVAL ENDPOINT
+# ═══════════════════════════════════════════
+
+@app.route("/api/documents/<doc_id>/validation", methods=["GET"])
+@require_auth
+def api_get_validation_report(doc_id):
+    """Retrieve the stored validation report for a document."""
+    try:
+        db = get_db()
+        oid = ObjectId(doc_id)
+        doc = db.documents.find_one({"_id": oid, "user_id": g.current_user_id})
+        if not doc:
+            return jsonify({"error": "Document not found"}), 404
+        report = doc.get("validation_report", "")
+        return jsonify({
+            "validation_report": report or "",
+            "has_report": bool(report and str(report).strip()),
+            "validation_status": doc.get("validation_status", "pending")
+        })
+    except InvalidId:
+        return jsonify({"error": "Invalid document id"}), 400
+    except Exception as e:
+        if isinstance(e, (ServerSelectionTimeoutError, PyMongoError)):
+            return _database_error_response(e)
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 

@@ -208,20 +208,12 @@
 % OPTIONAL - ADDITIONAL PROVISIONS
 % ======================================================================
 
-<<- if additional_provisions >>
+<<- if specific_additional_provisions >>
 \noindent \textbf{6.\quad Additional Provisions:}
 \begin{itemize}[leftmargin=2cm, label={}, itemsep=3pt]
-<<- if fixed_recovery_applicable >>
-    \item \textbf{Additional Provisions for Fixed Recovery CDS Transactions:} Applicable
-    \item \textbf{Final Price:} << fixed_recovery_final_price >>
-<<- endif >>
-<<- if recovery_lock_applicable >>
-    \item \textbf{Additional Provisions for Recovery Lock Credit Derivative Transactions:} Applicable
-    \item \textbf{Reference Price:} << recovery_lock_reference_price >>
-<<- endif >>
-<<- if monoline_applicable >>
-    \item \textbf{Additional Provisions for Monoline Insurer Reference Entities:} Applicable
-<<- endif >>
+<<- for provision in specific_additional_provisions >>
+    \item \textbf{<< provision.title >>:} << provision.description >>
+<<- endfor >>
 \end{itemize}
 \vspace{0.3cm}
 \hrule

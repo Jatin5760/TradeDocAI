@@ -53,23 +53,25 @@ export function SelectionStep({ stepDef, selections, onSelect }: {
   );
 }
 
-export function SectionStep({ section, stepData, onUpdate, aiMode, allData }: {
+export function SectionStep({ section, stepData, onUpdate, aiMode, allData, onFieldFocus, activeFieldKey }: {
   section: SchemaSection;
   stepData: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
   aiMode: boolean;
   allData: Record<string, unknown>;
+  onFieldFocus?: (key: string) => void;
+  activeFieldKey?: string | null;
 }) {
   return (
-    <div className="space-y-8 sm:space-y-10 animate-in fade-in duration-500">
-      <div className="pb-6 sm:pb-8 border-b border-slate-100/80">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{section.title}</h2>
-        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1.5">Section Configuration</p>
+    <div className="space-y-6 sm:space-y-7 animate-in fade-in duration-500">
+      <div className="pb-4 sm:pb-5 border-b border-slate-100/80">
+        <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{section.title}</h2>
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Section Configuration</p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 lg:gap-x-10 gap-y-7 sm:gap-y-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 lg:gap-x-8 gap-y-5 sm:gap-y-7">
         {(section.fields || []).map((f) => (
           <div key={f.key} className={f.type === 'textarea' || f.type.startsWith('repeater') ? 'md:col-span-2' : ''}>
-            <FieldRenderer field={f} stepData={stepData} onUpdate={onUpdate} aiMode={aiMode} allData={allData || {}} />
+            <FieldRenderer field={f} stepData={stepData} onUpdate={onUpdate} aiMode={aiMode} allData={allData || {}} onFieldFocus={onFieldFocus} activeFieldKey={activeFieldKey} />
           </div>
         ))}
         {section.subsections && section.subsections.map((ss, sidx) => (
@@ -79,7 +81,7 @@ export function SectionStep({ section, stepData, onUpdate, aiMode, allData }: {
             </div>
             {(ss.fields || []).map((f) => (
               <div key={f.key} className={f.type === 'textarea' || f.type.startsWith('repeater') ? 'md:col-span-2' : ''}>
-                <FieldRenderer field={f} stepData={stepData} onUpdate={onUpdate} aiMode={aiMode} allData={allData || {}} />
+                <FieldRenderer field={f} stepData={stepData} onUpdate={onUpdate} aiMode={aiMode} allData={allData || {}} onFieldFocus={onFieldFocus} activeFieldKey={activeFieldKey} />
               </div>
             ))}
           </React.Fragment>
@@ -89,24 +91,26 @@ export function SectionStep({ section, stepData, onUpdate, aiMode, allData }: {
   );
 }
 
-export function FieldsStep({ title, fields, stepData, onUpdate, aiMode, allData }: {
+export function FieldsStep({ title, fields, stepData, onUpdate, aiMode, allData, onFieldFocus, activeFieldKey }: {
   title: string;
   fields: SchemaField[];
   stepData: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
   aiMode: boolean;
   allData: Record<string, unknown>;
+  onFieldFocus?: (key: string) => void;
+  activeFieldKey?: string | null;
 }) {
   return (
-    <div className="space-y-8 sm:space-y-12 animate-in fade-in duration-500">
-      <div className="pb-6 sm:pb-8 border-b border-slate-100/80">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{title}</h2>
-        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1.5">Field Management</p>
+    <div className="space-y-6 sm:space-y-7 animate-in fade-in duration-500">
+      <div className="pb-4 sm:pb-5 border-b border-slate-100/80">
+        <h2 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{title}</h2>
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Field Management</p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 lg:gap-x-10 gap-y-7 sm:gap-y-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 lg:gap-x-8 gap-y-5 sm:gap-y-7">
         {fields.map((f) => (
           <div key={f.key} className={f.type === 'textarea' || f.type.startsWith('repeater') ? 'md:col-span-2' : ''}>
-            <FieldRenderer field={f} stepData={stepData} onUpdate={onUpdate} aiMode={aiMode} allData={allData} />
+            <FieldRenderer field={f} stepData={stepData} onUpdate={onUpdate} aiMode={aiMode} allData={allData} onFieldFocus={onFieldFocus} activeFieldKey={activeFieldKey} />
           </div>
         ))}
       </div>

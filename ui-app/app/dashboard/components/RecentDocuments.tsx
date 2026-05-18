@@ -7,6 +7,8 @@ import { docTypeName } from '../utils';
 interface RecentDocsProps {
   documents: RecentDoc[];
   onLoad: (doc: RecentDoc) => void;
+  onView?: (doc: RecentDoc) => void;
+  onCreateNew?: () => void;
 }
 
 const docAccentColor: Record<string, string> = {
@@ -17,7 +19,7 @@ const docAccentColor: Record<string, string> = {
 };
 const FALLBACK_UPDATED_AT = '1970-01-01T00:00:00.000Z';
 
-export default function RecentDocuments({ documents, onLoad }: RecentDocsProps) {
+export default function RecentDocuments({ documents, onLoad, onView, onCreateNew }: RecentDocsProps) {
   const [currentPage, setCurrentPage] = React.useState(1);
   const pageSize = 10;
 
@@ -52,6 +54,29 @@ export default function RecentDocuments({ documents, onLoad }: RecentDocsProps) 
         >
           Generate your first trade confirmation to see it listed here in your workspace.
         </p>
+        {onCreateNew && (
+          <button
+            onClick={onCreateNew}
+            className="mt-6"
+            style={{
+              padding: '12px 28px',
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              color: 'white',
+              borderRadius: '999px',
+              fontSize: '14px',
+              fontWeight: 700,
+              fontFamily: "'DM Sans', system-ui, sans-serif",
+              border: '1px solid #4338ca',
+              boxShadow: '0 6px 18px rgba(79,70,229,0.28)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 24px rgba(79,70,229,0.38)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 18px rgba(79,70,229,0.28)'; (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)'; }}
+          >
+            ✨ Create Your First Document
+          </button>
+        )}
       </div>
     );
   }
@@ -150,7 +175,7 @@ export default function RecentDocuments({ documents, onLoad }: RecentDocsProps) 
         <table className="w-full text-left">
           <thead>
             <tr style={{ background: 'rgba(248,249,252,0.8)' }}>
-              {['Trade Reference', 'Type', 'Status', ''].map((h, i) => (
+              {['Trade Reference', 'Type', 'Status', 'Actions'].map((h, i) => (
                 <th
                   key={i}
                   className="px-3 sm:px-6 py-2 sm:py-3"
@@ -219,22 +244,79 @@ export default function RecentDocuments({ documents, onLoad }: RecentDocsProps) 
                   </td>
                   <td className="px-3 sm:px-6 py-3 sm:py-4">
                     <div className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: doc.is_draft ? '#f59e0b' : '#10b981' }} />
-                      <span className="text-[12px] font-bold" style={{ color: doc.is_draft ? '#f59e0b' : '#10b981' }}>
-                        {doc.is_draft ? 'In Progress' : 'Verified'}
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{
+                          background: doc.is_draft
+                            ? '#f59e0b'
+                            : doc.validation_status === 'pending'
+                            ? '#8b5cf6'
+                            : '#10b981'
+                        }}
+                      />
+                      <span
+                        className="text-[12px] font-bold"
+                        style={{
+                          color: doc.is_draft
+                            ? '#f59e0b'
+                            : doc.validation_status === 'pending'
+                            ? '#8b5cf6'
+                            : '#10b981'
+                        }}
+                      >
+                        {doc.is_draft
+                          ? 'In Progress'
+                          : doc.validation_status === 'pending'
+                          ? 'Pending Validation'
+                          : 'Verified'}
                       </span>
                     </div>
                   </td>
                   <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
-                    <button
-                      onClick={() => onLoad(doc)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-all"
-                    >
-                      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      {/* AI-Extracted Badge — shown left of eye button for ai_created docs */}
+                      {doc.ai_created && (
+                        <span
+                          title="AI-Extracted Document"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center bg-violet-50/80"
+                        >
+                          <img src="/logo.svg" alt="AI" className="w-4 h-4 opacity-70" />
+                        </span>
+                      )}
+                      {/* View PDF — disabled for in-progress drafts */}
+                      {doc.is_draft ? (
+                        <span
+                          title="PDF not available — document is still in progress"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 cursor-not-allowed transition-all"
+                        >
+                          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => onView?.(doc)}
+                          title="View PDF"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                        >
+                          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </button>
+                      )}
+                      {/* Edit document — always enabled */}
+                      <button
+                        onClick={() => onLoad(doc)}
+                        title="Edit document"
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-all"
+                      >
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

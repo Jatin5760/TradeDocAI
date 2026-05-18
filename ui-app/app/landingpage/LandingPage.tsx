@@ -3,6 +3,7 @@ import Navbar from './sections/Navbar';
 import Hero from './sections/Hero';
 import Features from './sections/Features';
 import HowItWorks from './sections/HowItWorks';
+import Showcase from './sections/Showcase';
 import Comparison from './sections/Comparison';
 import SupportedDocs from './sections/SupportedDocs';
 import Pricing from './sections/Pricing';
@@ -221,6 +222,7 @@ export default function LandingPage() {
             <Hero />
             <Features />
             <HowItWorks />
+            <Showcase />
             <Comparison />
             <SupportedDocs />
             <Pricing />

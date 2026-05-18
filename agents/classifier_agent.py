@@ -81,7 +81,7 @@ def classify_document(state: DocForgeState) -> DocForgeState:
 
     try:
         prompt = CLASSIFICATION_PROMPT.format(email_text=email_text)
-        text = call_gemini(prompt, model_name=state.get("model"))
+        text = call_gemini(prompt)
 
         # Clean up any markdown code block wrapping
         if text.startswith("```"):

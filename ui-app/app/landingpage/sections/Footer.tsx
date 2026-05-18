@@ -1,11 +1,28 @@
+'use client';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useState, useEffect } from 'react';
+import { isAuthenticated } from '../../../lib/api';
 
 export default function Footer() {
+    const [loggedIn, setLoggedIn] = useState(false);
+
+    useEffect(() => {
+        const check = () => setLoggedIn(isAuthenticated());
+        check();
+        window.addEventListener('focus', check);
+        window.addEventListener('storage', check);
+        return () => {
+            window.removeEventListener('focus', check);
+            window.removeEventListener('storage', check);
+        };
+    }, []);
+
     return (
         <footer className="relative mt-10 sm:mt-20 pt-4 sm:pt-8 pb-4 sm:pb-12 overflow-hidden bg-slate-50 border-t border-slate-200">
             <div className="max-w-6xl mx-auto px-6 relative z-10">
-                {/* Merged CTA Section - Styled as a Solid Indigo Card with Shades */}
+                {/* Merged CTA Section - Styled as a Solid Indigo Card with Shades, hidden when logged in */}
+                {!loggedIn && (
                 <div className="relative mb-16 sm:mb-24 bg-linear-to-br from-indigo-600 to-indigo-700 rounded-[2.5rem] sm:rounded-[4rem] p-8 md:p-14 lg:p-16 shadow-2xl shadow-indigo-900/20 overflow-hidden text-center text-white">
                     {/* Subtle Background Shades */}
                     <div className="absolute -right-24 -top-24 w-96 h-96 bg-white/10 blur-3xl rounded-full" />
@@ -28,6 +45,7 @@ export default function Footer() {
                         </div>
                     </div>
                 </div>
+                )}
 
                 {/* Optimized Footer Grid */}
                 {/* Desktop & Tablet View: Preserving original 3-column layout */}

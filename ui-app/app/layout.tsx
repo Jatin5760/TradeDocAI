@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "TradeDocAI - Intelligent Trade Document Extraction",
   description: "Transform trade documents with AI-powered extraction, analysis, and form generation. Streamline your document management workflow.",
   keywords: ["trade documents", "document extraction", "AI forms", "PDF processing"],
+  icons: {
+    icon: "/logo-light.svg",
+    shortcut: "/logo-light.svg",
+    apple: "/logo-light.svg",
+  },
   openGraph: {
     title: "TradeDocAI - Intelligent Trade Document Extraction",
     description: "Transform trade documents with AI-powered extraction and analysis.",

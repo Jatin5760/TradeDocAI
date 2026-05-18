@@ -3,66 +3,6 @@
     "name": "CDS Confirmation",
     "description": "Credit Default Swap Confirmation",
     "icon": "🛡️",
-    "steps": [
-        {
-            "id": "general_terms",
-            "title": "General & Economic Terms",
-            "type": "fields",
-            "fields": [
-                "transaction_type",
-                "trade_date",
-                "effective_date",
-                "scheduled_termination_date",
-                "reference_entity",
-                "reference_obligation",
-                "notional_amount",
-                "fixed_rate"
-            ]
-        },
-        {
-            "id": "settlement_details",
-            "title": "Settlement & Payment Details",
-            "type": "fields",
-            "fields": [
-                "fixed_day_count",
-                "fixed_payment_dates",
-                "settlement_method"
-            ]
-        },
-        {
-            "id": "additional_provisions",
-            "title": "Additional Provisions",
-            "type": "selection",
-            "field": {
-                "key": "additional_provisions",
-                "label": "Are there any Additional Provisions?",
-                "type": "select",
-                "required": true,
-                "options": [
-                    {
-                        "value": "None",
-                        "label": "None",
-                        "subtitle": "Standard Matrix definitions apply"
-                    },
-                    {
-                        "value": "Fixed Recovery",
-                        "label": "Fixed Recovery CDS",
-                        "subtitle": "Pre-agreed final price upon default"
-                    },
-                    {
-                        "value": "Recovery Lock",
-                        "label": "Recovery Lock CDS",
-                        "subtitle": "Lock in a specific recovery price"
-                    },
-                    {
-                        "value": "Monoline",
-                        "label": "Monoline Insurer",
-                        "subtitle": "Special provisions for Monoline Reference Entities"
-                    }
-                ]
-            }
-        }
-    ],
     "sections": {
         "party_details": {
             "title": "Party & Agreement Details",
@@ -383,34 +323,15 @@
         },
         "specific_additional_provisions": {
             "title": "Specific Additional Provisions",
-            "always_show": false,
-            "show_when": {
-                "field": "additional_provisions",
-                "operator": "not_equal",
-                "value": "None"
-            },
+            "always_show": true,
             "fields": [
                 {
-                    "key": "fixed_recovery_final_price",
-                    "label": "Fixed Recovery Final Price",
-                    "type": "text",
+                    "key": "specific_additional_provisions",
+                    "label": "Additional Provision",
+                    "type": "repeater_pair",
                     "required": false,
-                    "placeholder": "e.g. 40%",
-                    "show_when": {
-                        "field": "additional_provisions",
-                        "value": "Fixed Recovery"
-                    }
-                },
-                {
-                    "key": "recovery_lock_reference_price",
-                    "label": "Recovery Lock Reference Price",
-                    "type": "text",
-                    "required": false,
-                    "placeholder": "e.g. 40%",
-                    "show_when": {
-                        "field": "additional_provisions",
-                        "value": "Recovery Lock"
-                    }
+                    "title_placeholder": "e.g. Fixed Recovery CDS, Recovery Lock, Monoline...",
+                    "description_placeholder": "Describe the provision in detail..."
                 }
             ]
         },

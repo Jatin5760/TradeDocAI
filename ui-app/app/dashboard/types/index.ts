@@ -56,8 +56,11 @@ export interface RecentDoc {
   data?: Record<string, unknown>;
   source_type?: string;
   is_draft?: boolean;
+  validation_status?: 'pending' | 'verified';
+  source_email?: string;
+  gcs_object_path?: string;
 }
 
 export type AppPage = 'landing' | 'analytics' | 'ai' | 'form' | 'pdf' | 'settings' | 'my-documents';
 export type ModalType = 'none' | 'mode' | 'type' | 'preview' | 'new-doc';
-export type SettingsTab = 'edit-profile' | 'preferences' | 'security';
+export type SettingsTab = 'edit-profile' | 'security';

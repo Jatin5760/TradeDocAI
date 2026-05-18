@@ -15,6 +15,7 @@ import AIExtractPanel from './components/AIExtractPanel';
 import ValidationReport from './components/ValidationReport';
 import { SelectionStep, SectionStep, FieldsStep } from './components/WizardComponents';
 import ChatCopilot from './components/ChatCopilot';
+import ChatSidebar from './components/ChatSidebar';
 
 // Replicated Components
 import DocumentOverviewCards, { TimeSavedCard } from './components/DocumentOverviewCards';
@@ -65,7 +66,7 @@ function readPageFromURL(): AppPage {
 function readSettingsTabFromURL(): SettingsTab {
   if (typeof window === 'undefined') return 'edit-profile';
   const urlSub = new URLSearchParams(window.location.search).get('sub') as SettingsTab | null;
-  return urlSub && ['edit-profile', 'preferences', 'security'].includes(urlSub) ? urlSub : 'edit-profile';
+  return urlSub && ['edit-profile', 'security'].includes(urlSub) ? urlSub : 'edit-profile';
 }
 
 function readStoredUserName(): string {
@@ -97,15 +98,18 @@ export default function DashboardPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [stepData, setStepData] = useState<Record<string, unknown>>({});
   const [irsSelections, setIrsSelections] = useState<Record<string, string>>({});
+  const [activeFieldKey, setActiveFieldKey] = useState<string | null>(null);
   const [aiMode, setAiMode] = useState(false);
   const [aiEmailText, setAiEmailText] = useState('');
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
   const [validationReport, setValidationReport] = useState('');
   const [validationPanelOpen, setValidationPanelOpen] = useState(false);
+  const [hasExistingValidationReport, setHasExistingValidationReport] = useState(false);
   const [currentPdfBlobUrl, setCurrentPdfBlobUrl] = useState<string | null>(null);
   const [currentPdfFilename, setCurrentPdfFilename] = useState('confirmation.pdf');
   const [currentPdfFileId, setCurrentPdfFileId] = useState('');
+  const [currentGcsObjectPath, setCurrentGcsObjectPath] = useState('');
   const [showValidateOnPdf, setShowValidateOnPdf] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingText, setLoadingText] = useState('Processing...');
@@ -118,13 +122,16 @@ export default function DashboardPage() {
   const [backendError, setBackendError] = useState('');
   const [settingsSub, setSettingsSub] = useState<SettingsTab>(getInitialSettingsTab);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const previousPageRef = useRef<AppPage | null>(null);
+  const currentPageRef = useRef<AppPage>('landing');
+  const stepperRef = useRef<HTMLDivElement>(null);
 
   // ── URL Sync & Init ───────────────────────
   useEffect(() => {
     setMounted(true);
     const token = localStorage.getItem('authToken');
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
     // Read page/settings from URL on client-side only (avoids hydration mismatch)
@@ -133,6 +140,11 @@ export default function DashboardPage() {
     const timer = window.setTimeout(() => setUserName(readStoredUserName()), 0);
     return () => window.clearTimeout(timer);
   }, [router]);
+
+  // Keep ref in sync with page state (avoids stale closure in callbacks)
+  useEffect(() => {
+    currentPageRef.current = page;
+  }, [page]);
 
   // 2. Sync State to URL
   useEffect(() => {
@@ -162,7 +174,7 @@ export default function DashboardPage() {
       const r = await fetch(`${API}/api/documents`, { headers: authHeaders() });
       if (r.status === 401) {
         clearSession();
-        router.push('/login');
+        router.push('/');
         return;
       }
       if (r.ok) {
@@ -232,9 +244,21 @@ export default function DashboardPage() {
   }, [fetchRecentDocs]);
 
   const handleBack = useCallback(() => {
-    // If we are in any active workflow (Form, AI Extract, or PDF Preview), 
-    // the header back arrow should take us back to the Dashboard (Landing).
-    if (page === 'pdf' || page === 'form' || page === 'ai' || page === 'my-documents') {
+    // If we came to form/pdf from my-documents, go back to my-documents
+    if (page === 'form' && previousPageRef.current === 'my-documents') {
+      setPage('my-documents');
+      setActiveSchema(null);
+      setCurrentStep(0);
+      setStepData({});
+      setIrsSelections({});
+      setAiMode(false);
+      setAiEmailText('');
+      setEditingDocId(null);
+      setModal('none');
+    } else if (page === 'form' || page === 'pdf') {
+      // From any other source, go home
+      goHome();
+    } else if (page === 'ai') {
       goHome();
     } else {
       goHome();
@@ -264,7 +288,7 @@ export default function DashboardPage() {
     return data;
   }, [activeSchema, stepData, irsSelections]);
 
-  const saveDocument = useCallback(async (data: Record<string, unknown>, isDraft: boolean = true): Promise<string | null> => {
+  const saveDocument = useCallback(async (data: Record<string, unknown>, isDraft: boolean = true, pdfFileId: string = ''): Promise<string | null> => {
     if (!activeSchema) return null;
     let summary = '';
     if (activeSchema.id === 'fx_ndf') summary = `${data.reference_currency || '?'}/${data.settlement_currency || '?'} — ${data.notional_amount || ''}`;
@@ -273,15 +297,17 @@ export default function DashboardPage() {
     else summary = `Exhibit ${(data.exhibit as string) || '?'} — ${data.party_a_name || ''} vs ${data.party_b_name || ''}`;
 
     try {
-      const payload = { 
-        doc_type: activeSchema.id, 
-        name: activeSchema.name, 
-        icon: activeSchema.icon || '📄', 
-        summary, 
-        ai_created: aiMode, 
+      const payload: Record<string, unknown> = {
+        doc_type: activeSchema.id,
+        name: activeSchema.name,
+        icon: activeSchema.icon || '📄',
+        summary,
+        ai_created: aiMode,
         data,
-        is_draft: isDraft 
+        is_draft: isDraft
       };
+      if (pdfFileId) { payload.pdf_file_id = pdfFileId; }
+      if (aiMode && aiEmailText) { payload.source_email = aiEmailText; }
 
       if (editingDocId) {
         const r = await fetch(`${API}/api/documents/${editingDocId}`, {
@@ -312,6 +338,23 @@ export default function DashboardPage() {
     return null;
   }, [activeSchema, aiMode, editingDocId, showToast, fetchRecentDocs]);
 
+  const checkExistingValidationReport = useCallback(async (docId: string) => {
+    try {
+      const r = await fetch(`${API}/api/documents/${docId}/validation`, { headers: authHeaders() });
+      if (r.ok) {
+        const data = await r.json();
+        if (data.has_report) {
+          setValidationReport(data.validation_report);
+          setHasExistingValidationReport(true);
+          return;
+        }
+      }
+      setHasExistingValidationReport(false);
+    } catch {
+      setHasExistingValidationReport(false);
+    }
+  }, []);
+
   const generatePDF = useCallback(async () => {
     if (!activeSchema) return;
     const data = assembleJSON();
@@ -334,23 +377,31 @@ export default function DashboardPage() {
       let filename = 'confirmation.pdf';
       const match = contentDisp.match(/filename=([^;]+)/);
       if (match) filename = match[1].replace(/"/g, '').trim();
-      setCurrentPdfFileId(response.headers.get('X-TradeDoc-File-Id') || '');
+      const fileId = response.headers.get('X-TradeDoc-File-Id') || '';
+      setCurrentPdfFileId(fileId);
+      setCurrentGcsObjectPath('');
       if (currentPdfBlobUrl) URL.revokeObjectURL(currentPdfBlobUrl);
       const url = URL.createObjectURL(blob);
       setCurrentPdfBlobUrl(url);
       setCurrentPdfFilename(filename);
       
-      // Finalize the document when PDF is generated
-      await saveDocument(data, false); 
+      // Finalize the document when PDF is generated (pass pdf_file_id)
+      await saveDocument(data, false, fileId);
       
       hideLoading();
       setShowValidateOnPdf(aiMode);
       setPage('pdf');
+      // Check for existing validation report on this document
+      if (editingDocId && aiMode) {
+        checkExistingValidationReport(editingDocId);
+      } else {
+        setHasExistingValidationReport(false);
+      }
       showToast('✅ PDF ready — review below');
     } catch {
       hideLoading(); showToast('❌ Server error');
     }
-  }, [activeSchema, assembleJSON, currentPdfBlobUrl, aiMode, saveDocument, showToast]);
+  }, [activeSchema, assembleJSON, currentPdfBlobUrl, aiMode, saveDocument, showToast, editingDocId, checkExistingValidationReport]);
 
   const downloadWord = useCallback(async () => {
     if (!currentPdfFilename) { showToast('❌ No PDF to convert'); return; }
@@ -383,15 +434,21 @@ export default function DashboardPage() {
     showLoading('Running validation...', 'Comparing PDF against email with AI');
     try {
       const preferredModel = localStorage.getItem('preferredModel') || 'gemini-flash-latest';
+      const body: Record<string, string> = {
+        email_text: aiEmailText,
+        pdf_filename: currentPdfFilename,
+        pdf_file_id: currentPdfFileId,
+        model: preferredModel,
+        doc_id: editingDocId || ''
+      };
+      // For stored documents from GCS (e.g., from Validity Pending), pass the GCS path
+      if (currentGcsObjectPath) {
+        body.gcs_object_path = currentGcsObjectPath;
+      }
       const response = await fetch(`${API}/validate`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ 
-          email_text: aiEmailText, 
-          pdf_filename: currentPdfFilename, 
-          pdf_file_id: currentPdfFileId,
-          model: preferredModel
-        }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) {
         let errMsg = 'Validation failed';
@@ -401,12 +458,14 @@ export default function DashboardPage() {
       const result = await response.json();
       hideLoading();
       setValidationReport(result.validation_report || 'No report generated');
+      setHasExistingValidationReport(true);
       setValidationPanelOpen(true);
+      setShowValidateOnPdf(false); // successfully validated — hide the button
       showToast('✅ Validation complete');
     } catch {
       hideLoading(); showToast('❌ Server error');
     }
-  }, [aiEmailText, currentPdfFilename, currentPdfFileId, showToast]);
+  }, [aiEmailText, currentPdfFilename, currentPdfFileId, currentGcsObjectPath, editingDocId, showToast]);
 
   const submitAIExtract = useCallback(async (modelChoice?: string) => {
     if (!aiEmailText.trim()) { showToast('Please paste text first'); return; }
@@ -483,7 +542,20 @@ export default function DashboardPage() {
     }
   }, [showToast, setRecentDocs]);
 
+  // Track that we entered form from my-documents
+  const navigateToMyDocuments = useCallback(() => {
+    previousPageRef.current = 'my-documents';
+    setPage('my-documents');
+  }, []);
+
   const openDocInForm = useCallback(async (doc: RecentDoc) => {
+    // Track source page before navigating to form so back button returns correctly
+    // Use ref (not state) to avoid stale closure — 'page' is not a dep of this callback
+    if (currentPageRef.current === 'my-documents') {
+      previousPageRef.current = 'my-documents';
+    } else {
+      previousPageRef.current = null; // coming from dashboard/landing → back goes home
+    }
     const schema = schemas[doc.doc_type];
     if (!schema) { showToast('❌ Unknown document type'); return; }
     showLoading('Loading document...', 'Fetching from database');
@@ -494,6 +566,7 @@ export default function DashboardPage() {
       const data: Record<string, unknown> = full.data || {};
       setActiveSchema(schema);
       setAiMode(full.ai_created || false);
+      setAiEmailText(full.source_email || '');
       setEditingDocId(full._id);
       const newStepData: Record<string, unknown> = {};
       const newIrsSelections: Record<string, string> = {};
@@ -514,6 +587,80 @@ export default function DashboardPage() {
       hideLoading(); showToast('❌ Failed to load');
     }
   }, [schemas, showToast]);
+
+  // View a finalized document's stored PDF
+  const viewPdfFromDoc = useCallback(async (doc: RecentDoc) => {
+    showLoading('Opening PDF...', 'Loading document');
+    try {
+      const r = await fetch(`${API}/api/documents/${doc._id}/pdf`, { headers: authHeaders() });
+      if (!r.ok) {
+        let errMsg = 'PDF not found';
+        try { const d = await r.json(); errMsg = d.error || errMsg; } catch {}
+        hideLoading(); showToast('❌ ' + errMsg); return;
+      }
+
+      const contentType = r.headers.get('Content-Type') || '';
+
+      // GCS signed URL response — server returns JSON with a redirect URL
+      if (contentType.includes('application/json')) {
+        const data = await r.json();
+        const signedUrl: string | undefined = data.signed_url;
+        const filename: string = data.filename || 'confirmation.pdf';
+
+        if (!signedUrl) {
+          hideLoading(); showToast('❌ No signed URL returned'); return;
+        }
+
+        // Fetch the actual PDF bytes from the signed GCS URL
+        const pdfResp = await fetch(signedUrl);
+        if (!pdfResp.ok) {
+          hideLoading(); showToast('❌ Failed to fetch PDF from cloud storage'); return;
+        }
+        const pdfBlob = await pdfResp.blob();
+
+        if (currentPdfBlobUrl) URL.revokeObjectURL(currentPdfBlobUrl);
+        const url = URL.createObjectURL(pdfBlob);
+        setCurrentPdfBlobUrl(url);
+        setCurrentPdfFilename(filename);
+        setCurrentPdfFileId('');
+        setEditingDocId(doc._id);
+        setAiMode(doc.ai_created || false);
+        setAiEmailText(doc.source_email || '');
+        setCurrentGcsObjectPath(doc.gcs_object_path || '');
+        hideLoading();
+        setShowValidateOnPdf(doc.ai_created && doc.validation_status === 'pending');
+        // Check if a validation report already exists for this document
+        checkExistingValidationReport(doc._id);
+        setPage('pdf');
+        showToast('✅ PDF loaded from cloud');
+        return;
+      }
+
+      // Direct PDF blob response (temp disk or GCS download bytes)
+      const blob = await r.blob();
+      const contentDisp = r.headers.get('Content-Disposition') || '';
+      let fname = 'confirmation.pdf';
+      const match = contentDisp.match(/filename=([^;]+)/);
+      if (match) fname = match[1].replace(/"/g, '').trim();
+      setCurrentPdfFileId(r.headers.get('X-TradeDoc-File-Id') || '');
+      if (currentPdfBlobUrl) URL.revokeObjectURL(currentPdfBlobUrl);
+      const url = URL.createObjectURL(blob);
+      setCurrentPdfBlobUrl(url);
+      setCurrentPdfFilename(fname);
+      setEditingDocId(doc._id);
+      setAiMode(doc.ai_created || false);
+      setAiEmailText(doc.source_email || '');
+      setCurrentGcsObjectPath(doc.gcs_object_path || '');
+      hideLoading();
+      setShowValidateOnPdf(doc.ai_created && doc.validation_status === 'pending');
+      // Check if a validation report already exists for this document
+      checkExistingValidationReport(doc._id);
+      setPage('pdf');
+      showToast('✅ PDF loaded');
+    } catch {
+      hideLoading(); showToast('❌ Server error');
+    }
+  }, [currentPdfBlobUrl, showToast]);
 
   const getSteps = useCallback((): Array<{ id: string; title: string }> => {
     if (!activeSchema) return [];
@@ -540,6 +687,19 @@ export default function DashboardPage() {
   }, [activeSchema, irsSelections]);
 
   const steps = getSteps();
+
+  // ── Auto-scroll stepper to active tab ─────────
+  useEffect(() => {
+    if (!stepperRef.current) return;
+    const container = stepperRef.current;
+    const activeBtn = container.querySelector(`button[data-step-index="${currentStep}"]`) as HTMLElement | null;
+    if (activeBtn) {
+      const containerRect = container.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      const scrollLeft = container.scrollLeft + btnRect.left - containerRect.left - containerRect.width / 2 + btnRect.width / 2;
+      container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+    }
+  }, [currentStep]);
 
   const handleNext = useCallback(() => {
     if (currentStep < steps.length - 1) setCurrentStep(c => c + 1);
@@ -575,7 +735,7 @@ export default function DashboardPage() {
           allFields.find(f => f.key === key)
         ).filter(Boolean) as SchemaField[];
         
-        return <FieldsStep title={step.title} fields={resolvedFields} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} />;
+        return <FieldsStep title={step.title} fields={resolvedFields} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} />;
       }
       
       return <SelectionStep stepDef={step} selections={irsSelections} onSelect={(k, v) => setIrsSelections(p => ({ ...p, [k]: v }))} />;
@@ -608,14 +768,49 @@ export default function DashboardPage() {
         return true;
       });
       const section = sectionEntries[sectionIdx]?.[1] as SchemaSection;
-      return section ? <SectionStep section={section} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} /> : null;
+      return section ? <SectionStep section={section} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} /> : null;
     }
     
     const sec = activeSchema.sections[currentStep];
-    return sec ? <FieldsStep title={sec.title} fields={sec.fields || []} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} /> : null;
+    return sec ? <FieldsStep title={sec.title} fields={sec.fields || []} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} /> : null;
   };
 
-  const handleLogout = () => { clearSession(); router.push('/login'); };
+  // ── ChatSidebar helpers ─────────────────────
+  const isManualForm = page === 'form' && !aiMode && !!activeSchema;
+
+  // Compute active field label for sidebar display
+  const getActiveFieldLabel = (): string => {
+    if (!activeFieldKey || !activeSchema) return '';
+    const allFields = gatherAllFields();
+    const field = allFields.find(f => f.key === activeFieldKey);
+    return field ? field.label : activeFieldKey.replace('__rep_', '');
+  };
+
+  // Gather all fields from the current schema
+  const gatherAllFields = useCallback((): SchemaField[] => {
+    if (!activeSchema?.sections) return [];
+    const all: SchemaField[] = [];
+    if (Array.isArray(activeSchema.sections)) {
+      activeSchema.sections.forEach(s => all.push(...(s.fields || [])));
+    } else {
+      Object.values(activeSchema.sections).forEach(s => {
+        const sec = s as SchemaSection;
+        all.push(...(sec.fields || []));
+        if (sec.subsections) sec.subsections.forEach(ss => all.push(...(ss.fields || [])));
+      });
+    }
+    return all;
+  }, [activeSchema]);
+
+  const allFormFields = gatherAllFields();
+  const totalFields = allFormFields.length;
+  const filledFields = allFormFields.filter(f => {
+    const val = stepData[f.key];
+    return val !== undefined && val !== null && String(val).trim() !== '';
+  }).length;
+  const activeFieldLabel = getActiveFieldLabel();
+
+  const handleLogout = () => { clearSession(); router.push('/'); };
 
   return (
     <div className="flex h-[100dvh] overflow-hidden selection:bg-indigo-100" style={{ background: '#f8f9fc', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -807,84 +1002,68 @@ export default function DashboardPage() {
         onSetPage={(nextPage) => { setPage(nextPage); setSidebarOpen(false); }}
         isMobileOpen={sidebarOpen}
         onCloseMobile={() => setSidebarOpen(false)}
+        hidden={isManualForm}
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative">
         
-        {/* Top Header — glassmorphic, matches landing navbar */}
-        <header
-          className="min-h-[68px] px-4 sm:px-6 lg:px-8 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-0 z-10"
-          style={{
-            background: 'rgba(255,255,255,0.72)',
-            backdropFilter: 'blur(20px) saturate(1.4)',
-            WebkitBackdropFilter: 'blur(20px) saturate(1.4)',
-            borderBottom: '1px solid rgba(226,232,240,0.55)',
-            boxShadow: '0 1px 16px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="w-9 h-9 flex items-center justify-center rounded-xl bg-white text-slate-600 border border-slate-200 shadow-sm lg:hidden"
-              aria-label="Open navigation"
-            >
-              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" /></svg>
-            </button>
-            {mounted && page !== 'landing' && (
+        {/* Mobile-only header — shows hamburger icon + heading on all pages for sidebar access */}
+        <div className="lg:hidden sticky top-0 z-20 flex items-center gap-3 px-4 py-3" style={{ background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', borderBottom: '1px solid rgba(226,232,240,0.55)', boxShadow: '0 1px 16px rgba(0,0,0,0.04)' }}>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="w-9 h-9 flex items-center justify-center rounded-xl bg-white text-slate-600 border border-slate-200 shadow-sm shrink-0"
+            aria-label="Open navigation"
+          >
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <h1 className="text-base font-bold text-slate-800 font-inter tracking-tight truncate">
+            {page === 'landing' ? 'Dashboard' :
+             page === 'my-documents' ? 'My Documents' :
+             page === 'ai' ? 'AI Extract' :
+             page === 'analytics' ? 'Analytics' :
+             page === 'settings' ? 'Settings' :
+             activeSchema?.name || 'Document Editor'}
+          </h1>
+        </div>
+
+        {/* Desktop header — only for form/pdf pages with critical action buttons */}
+        {(page === 'form' || page === 'pdf') && (
+          <div className="hidden lg:flex sticky top-0 z-20 items-center justify-between px-6 py-3" style={{ background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)', borderBottom: '1px solid rgba(226,232,240,0.55)', boxShadow: '0 1px 16px rgba(0,0,0,0.04)' }}>
+            <div className="flex items-center gap-4 min-w-0">
               <button
                 onClick={handleBack}
-                className="w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200"
-                style={{ background: 'rgba(241,245,249,1)', color: '#64748b', border: '1px solid rgba(226,232,240,0.8)' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(226,232,240,0.9)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(241,245,249,1)'; }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-800 hover:border-slate-300 transition-colors shadow-sm shrink-0"
               >
-                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7"/></svg>
+                <span className="text-sm font-bold font-inter">Back</span>
               </button>
-            )}
-            <h1 className="truncate text-base sm:text-xl" style={{ fontWeight: 700, color: '#0f172a', fontFamily: "'DM Sans', system-ui, sans-serif", letterSpacing: '-0.02em', lineHeight: 1.15 }}>
-              {!mounted ? 'Dashboard Overview' : page === 'landing' ? 'Dashboard Overview' : page === 'analytics' ? 'Analytics Overview' : page === 'ai' ? 'AI Extraction Engine' : activeSchema?.name || 'Document Editor'}
-            </h1>
-          </div>
-
-          <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:justify-end sm:pb-0">
-            {/* Header Icons Removed for Minimalist Look */}
-            {page === 'form' && (
-              <>
-                <button onClick={() => saveDocument(assembleJSON())} className="transition-all duration-200 whitespace-nowrap" style={{ padding: '8px 18px', background: 'white', border: '1px solid rgba(226,232,240,0.9)', color: '#475569', borderRadius: '999px', fontSize: '12px', fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif" }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#6366f1'; (e.currentTarget as HTMLButtonElement).style.color = '#6366f1'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(226,232,240,0.9)'; (e.currentTarget as HTMLButtonElement).style.color = '#475569'; }}>Save Draft</button>
-                <button onClick={generatePDF} className="transition-all duration-200 whitespace-nowrap" style={{ padding: '8px 20px', background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', color: 'white', borderRadius: '999px', fontSize: '12px', fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif", border: '1px solid #4338ca', boxShadow: '0 6px 18px rgba(79,70,229,0.28)' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 8px 24px rgba(79,70,229,0.38)'; }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 18px rgba(79,70,229,0.28)'; }}>Generate PDF</button>
-              </>
-            )}
-            {page === 'pdf' && (
-              <>
-                {showValidateOnPdf && (
-                  <button 
-                    onClick={requestValidation} 
-                    className="transition-all duration-300 flex items-center gap-3 group whitespace-nowrap"
-                    style={{ 
-                      padding: '10px 24px', 
-                      background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', 
-                      color: 'white', 
-                      borderRadius: '999px', 
-                      fontSize: '14px', 
-                      fontWeight: 700, 
-                      fontFamily: "'DM Sans', system-ui, sans-serif",
-                      border: '1px solid #4338ca',
-                      boxShadow: '0 4px 12px rgba(79,70,229,0.25)' 
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 16px rgba(79,70,229,0.35)'; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)'; (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(79,70,229,0.25)'; }}
+              <h1 className="text-lg font-bold text-slate-800 font-inter tracking-tight truncate">
+                {activeSchema?.name || 'Document Editor'}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {page === 'form' && (
+                <>
+                  <button
+                    onClick={() => saveDocument(assembleJSON(), true)}
+                    className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 text-sm font-bold font-inter hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
                   >
-                    <span className="text-lg group-hover:rotate-12 transition-transform">✨</span>
-                    Generate Validation Report
+                    Save Draft
                   </button>
-                )}
-                <button onClick={() => setPage('form')} className="whitespace-nowrap" style={{ padding: '10px 22px', background: 'white', border: '1px solid rgba(226,232,240,0.9)', color: '#475569', borderRadius: '999px', fontSize: '14px', fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif" }}>Edit Data</button>
-                <button onClick={downloadWord} className="whitespace-nowrap" style={{ padding: '10px 22px', background: 'white', border: '1px solid rgba(226,232,240,0.9)', color: '#475569', borderRadius: '999px', fontSize: '14px', fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif" }}>Export Word</button>
-                <button onClick={() => { const a = document.createElement('a'); a.href = currentPdfBlobUrl!; a.download = currentPdfFilename; a.click(); }} className="whitespace-nowrap" style={{ padding: '10px 26px', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', color: 'white', borderRadius: '999px', fontSize: '14px', fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif", border: '1px solid #047857', boxShadow: '0 6px 18px rgba(5,150,105,0.25)' }}>Download PDF</button>
-              </>
-            )}
+                  <button
+                    onClick={generatePDF}
+                    className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold font-inter hover:bg-indigo-700 transition-colors shadow-sm"
+                  >
+                    Generate PDF
+                  </button>
+                </>
+              )}
+              {page === 'pdf' && (
+                <></>
+              )}
+            </div>
           </div>
-        </header>
+        )}
 
         <div className="flex-1 overflow-y-auto scroll-smooth px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           {backendDown && (
@@ -900,61 +1079,69 @@ export default function DashboardPage() {
             </div>
           )}
           {page === 'landing' && (
-            <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center py-10 sm:py-14 md:py-20 animate-fade-in px-4">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-[24px] sm:rounded-[32px] bg-white border border-border-secondary flex items-center justify-center mb-6 sm:mb-8 shadow-sm">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z" stroke="#1814f3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M7 7H17" stroke="#1814f3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M7 12H17" stroke="#1814f3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M7 17H13" stroke="#1814f3" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-text-secondary font-inter text-center mb-3 sm:mb-4">
-                Welcome to your Workspace
-              </h1>
-              <p className="text-text-tertiary text-center max-w-lg mb-8 sm:mb-12 leading-relaxed font-medium text-sm sm:text-base px-2">
-                Create your trade documents manually or use our AI-powered extraction to generate them from raw text and emails.
-              </p>
-              <div className="flex flex-row gap-3 sm:gap-6 md:gap-8 justify-center items-center w-full px-4 flex-wrap">
-                <button
-                  className="glass-btn-wrap text-sm sm:text-[15px] md:text-lg lg:text-xl cursor-pointer w-auto max-w-[280px]"
-                  onClick={() => setModal('new-doc')}
-                >
-                  <div className="glass-btn px-8 py-3 sm:px-10 sm:py-4 md:px-10 md:py-4 lg:px-14 lg:py-6" style={{ pointerEvents: 'auto' }}>
-                    <span style={{ color: '#000', fontWeight: 600, fontFamily: 'var(--font-display), "DM Serif Display", Georgia, serif' }}>
-                      New Document
-                    </span>
-                  </div>
-                  <div className="glass-btn-shadow" />
-                </button>
+            <>
+              {/* Welcome Header — kept narrow for readability */}
+              <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center pt-10 sm:pt-14 md:pt-20 pb-6 sm:pb-8 animate-fade-in px-4">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-[24px] sm:rounded-[32px] bg-white border border-border-secondary flex items-center justify-center mb-6 sm:mb-8 shadow-sm p-3 sm:p-4">
+                  <img src="/logo.svg" alt="TradeDoc AI Logo" className="w-full h-full object-contain" />
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-text-secondary font-inter text-center mb-3 sm:mb-4">
+                  Welcome to your Workspace
+                </h1>
+                <p className="text-text-tertiary text-center max-w-lg mb-8 sm:mb-12 leading-relaxed font-medium text-sm sm:text-base px-2">
+                  Create your trade documents manually or use our AI-powered extraction to generate them from raw text and emails.
+                </p>
+                <div className="flex flex-row gap-3 sm:gap-6 md:gap-8 justify-center items-center w-full px-4 flex-wrap">
+                  <button
+                    className="glass-btn-wrap text-sm sm:text-[15px] md:text-lg lg:text-xl cursor-pointer w-auto max-w-[280px]"
+                    onClick={() => setModal('new-doc')}
+                  >
+                    <div className="glass-btn px-8 py-3 sm:px-10 sm:py-4 md:px-10 md:py-4 lg:px-14 lg:py-6" style={{ pointerEvents: 'auto' }}>
+                      <span style={{ color: '#000', fontWeight: 600, fontFamily: 'var(--font-display), "DM Serif Display", Georgia, serif' }}>
+                        New Document
+                      </span>
+                    </div>
+                    <div className="glass-btn-shadow" />
+                  </button>
 
-                <button
-                  className="glass-btn-wrap text-sm sm:text-[15px] md:text-lg lg:text-xl cursor-pointer w-auto max-w-[280px]"
-                  onClick={() => setPage('analytics')}
-                >
-                  <div className="glass-btn px-8 py-3 sm:px-10 sm:py-4 md:px-10 md:py-4 lg:px-14 lg:py-6" style={{ pointerEvents: 'auto' }}>
-                    <span style={{ color: '#000', fontWeight: 600, fontFamily: 'var(--font-display), "DM Serif Display", Georgia, serif' }}>
-                      View Analytics
-                    </span>
-                  </div>
-                  <div className="glass-btn-shadow" />
-                </button>
+                  <button
+                    className="glass-btn-wrap text-sm sm:text-[15px] md:text-lg lg:text-xl cursor-pointer w-auto max-w-[280px]"
+                    onClick={() => setPage('analytics')}
+                  >
+                    <div className="glass-btn px-8 py-3 sm:px-10 sm:py-4 md:px-10 md:py-4 lg:px-14 lg:py-6" style={{ pointerEvents: 'auto' }}>
+                      <span style={{ color: '#000', fontWeight: 600, fontFamily: 'var(--font-display), "DM Serif Display", Georgia, serif' }}>
+                        View Analytics
+                      </span>
+                    </div>
+                    <div className="glass-btn-shadow" />
+                  </button>
+                </div>
               </div>
 
-              {/* All Documents Section */}
-              <section className="w-full max-w-[1440px] mx-auto mt-8 sm:mt-12 px-4">
+              {/* All Documents Section — wider container */}
+              <section className="w-full max-w-6xl mx-auto mt-4 sm:mt-6 px-4 pb-10 sm:pb-14 md:pb-20">
                 <div className="flex flex-row justify-between items-center w-full mb-5">
                   <h2 className="text-lg sm:text-xl font-semibold text-text-secondary font-inter">
                     All Documents
                   </h2>
                 </div>
-                <RecentDocuments documents={recentDocs} onLoad={openDocInForm} />
+                <RecentDocuments
+                  documents={recentDocs}
+                  onLoad={openDocInForm}
+                  onView={viewPdfFromDoc}
+                  onCreateNew={() => setModal('new-doc')}
+                />
               </section>
-            </div>
+            </>
           )}
 
           {page === 'analytics' && (
-            <div className="w-full max-w-[1440px] mx-auto grid grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-6 lg:gap-8 animate-fade-in px-1 sm:px-0">
+            <>
+              {/* Desktop-only heading (mobile heading lives in the top nav strip) */}
+              <h1 className="hidden lg:block text-xl sm:text-2xl font-bold text-slate-900 font-inter tracking-tight mb-2 lg:mb-6">
+                Analytics
+              </h1>
+              <div className="w-full max-w-[1440px] mx-auto grid grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-6 lg:gap-8 animate-fade-in px-1 sm:px-0">
               {/* Blue card: full width on mobile, 1 col on desktop (with teal stacked below) */}
               <div className="col-span-2 lg:col-span-1">
                 <DocumentOverviewCards documents={recentDocs} onLoad={openDocInForm} hideTimeSavedMobile />
@@ -969,6 +1156,7 @@ export default function DashboardPage() {
               <RecentActivitySection documents={recentDocs} onLoad={openDocInForm} />
               <ExtractionEfficiencyChart documents={recentDocs} />
             </div>
+            </>
           )}
 
           {page === 'settings' && (
@@ -981,13 +1169,41 @@ export default function DashboardPage() {
           )}
 
           {page === 'my-documents' && (
-            <MyDocumentsUI 
-              documents={recentDocs} 
-              onViewPdf={(doc) => {
-                // Future: Fetch PDF from GCP and set currentPdfBlobUrl
-              }}
+            <MyDocumentsUI
+              documents={recentDocs}
               onEdit={openDocInForm}
               onDelete={handleDeleteDocument}
+              onFetchPdfBlob={async (docId: string) => {
+                try {
+                  const r = await fetch(`${API}/api/documents/${docId}/pdf`, { headers: authHeaders() });
+                  if (!r.ok) return null;
+                  const contentType = r.headers.get('Content-Type') || '';
+                  // GCS signed URL response
+                  if (contentType.includes('application/json')) {
+                    const data = await r.json();
+                    const signedUrl: string | undefined = data.signed_url;
+                    const filename: string = data.filename || 'confirmation.pdf';
+                    if (!signedUrl) return null;
+                    const pdfResp = await fetch(signedUrl);
+                    if (!pdfResp.ok) return null;
+                    const blob = await pdfResp.blob();
+                    return { url: URL.createObjectURL(blob), filename };
+                  }
+                  // Direct PDF blob
+                  const blob = await r.blob();
+                  const contentDisp = r.headers.get('Content-Disposition') || '';
+                  let fname = 'confirmation.pdf';
+                  const match = contentDisp.match(/filename=([^;]+)/);
+                  if (match) fname = match[1].replace(/"/g, '').trim();
+                  return { url: URL.createObjectURL(blob), filename: fname };
+                } catch {
+                  return null;
+                }
+              }}
+              onFormView={(doc) => {
+                openDocInForm(doc);
+              }}
+              onViewPdfPage={(doc) => viewPdfFromDoc(doc)}
             />
           )}
 
@@ -995,7 +1211,7 @@ export default function DashboardPage() {
           {page === 'ai' && <AIExtractPanel text={aiEmailText} onChange={setAiEmailText} onExtract={submitAIExtract} onCancel={goHome} />}
 
           {page === 'form' && (
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-2xl mx-auto">
               {/* AI Mode Banner */}
               {aiMode && (
                 <div
@@ -1020,7 +1236,7 @@ export default function DashboardPage() {
               )}
 
               {/* Progress Stepper */}
-              <div className="mb-10 px-2 py-4 bg-slate-50/50 rounded-3xl border border-slate-100 flex items-center gap-2 overflow-x-auto no-scrollbar relative">
+              <div ref={stepperRef} className="mb-8 px-2 py-3 bg-slate-50/50 rounded-2xl border border-slate-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar relative scroll-smooth">
                 {(() => {
                   if (!activeSchema) return null;
                   const wizardSteps = activeSchema.steps || [];
@@ -1054,12 +1270,13 @@ export default function DashboardPage() {
                     <React.Fragment key={i}>
                       <button
                         onClick={() => setCurrentStep(i)}
+                        data-step-index={i}
                         className="whitespace-nowrap transition-all duration-300 flex items-center gap-3 shrink-0"
                         style={{
-                          height: '44px',
-                          padding: '0 20px',
-                          borderRadius: '12px',
-                          fontSize: '13px',
+                          height: '36px',
+                          padding: '0 16px',
+                          borderRadius: '10px',
+                          fontSize: '12px',
                           fontWeight: i === currentStep ? 800 : 600,
                           fontFamily: "'DM Sans', system-ui, sans-serif",
                           background: i === currentStep ? '#4f46e5' : 'transparent',
@@ -1085,18 +1302,18 @@ export default function DashboardPage() {
 
               {/* Form Card */}
               <div
-                className="bg-white min-h-[400px]"
+                className="bg-white min-h-[360px]"
                 style={{
-                  borderRadius: '24px',
+                  borderRadius: '20px',
                   border: '1px solid rgba(226,232,240,0.8)',
                   boxShadow: '0 4px 32px rgba(0,0,0,0.06)',
                 }}
               >
-                <div className="p-5 sm:p-8 lg:p-10">
+                <div className="p-4 sm:p-6 lg:p-7">
                   {renderFormContent()}
                 </div>
                 <div
-                  className="mx-5 sm:mx-8 lg:mx-10 pb-5 sm:pb-8 pt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="mx-4 sm:mx-6 lg:mx-7 pb-4 sm:pb-6 pt-4 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between"
                   style={{ borderTop: '1px solid rgba(241,245,249,1)' }}
                 >
                   <button
@@ -1142,18 +1359,47 @@ export default function DashboardPage() {
           )}
 
           {page === 'pdf' && (
-            <CustomPDFViewer 
-              pdfUrl={currentPdfBlobUrl!} 
+            <CustomPDFViewer
+              pdfUrl={currentPdfBlobUrl!}
               filename={currentPdfFilename}
               onClose={goHome}
               onDownload={() => { const a = document.createElement('a'); a.href = currentPdfBlobUrl!; a.download = currentPdfFilename; a.click(); }}
               onPrint={() => { const w = window.open(currentPdfBlobUrl!, '_blank'); w?.print(); }}
+              isAiCreated={aiMode}
+              hasExistingReport={hasExistingValidationReport}
+              showValidateOnPdf={showValidateOnPdf}
+              onGenerateValidation={requestValidation}
+              onViewCurrentReport={() => setValidationPanelOpen(true)}
+              onConvertToWord={downloadWord}
+              generatingValidation={loading}
             />
           )}
         </div>
       </main>
 
-      <ValidationReport report={validationReport} isOpen={validationPanelOpen} onClose={() => setValidationPanelOpen(false)} />
+      {/* ── ChatSidebar (manual form pages only) ── */}
+      {isManualForm && (
+        <ChatSidebar
+          docType={activeSchema?.id || ''}
+          schema={activeSchema}
+          activeFieldKey={activeFieldKey}
+          activeFieldLabel={activeFieldLabel}
+          onFieldFocus={setActiveFieldKey}
+          totalFields={totalFields}
+          filledFields={filledFields}
+          skippedCount={0}
+          currentData={{ ...irsSelections, ...stepData }}
+        />
+      )}
+
+      <ValidationReport
+        report={validationReport}
+        isOpen={validationPanelOpen}
+        onClose={() => setValidationPanelOpen(false)}
+        documentTitle={currentPdfFilename}
+        validationDate={new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+        onRegenerate={requestValidation}
+      />
 
       {/* Loading Overlay */}
       {loading && (
@@ -1309,9 +1555,10 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      {/* Chat Copilot */}
+      {/* Chat Copilot — hidden on manual form pages (ChatSidebar replaces it) */}
+      {!isManualForm && (
       <div className="fixed bottom-4 right-4 z-140 sm:bottom-6 sm:right-6 md:bottom-8 md:right-8">
-        <ChatCopilot 
+        <ChatCopilot
           docType={page === 'form' ? activeSchema?.id : null}
           schema={page === 'form' ? activeSchema : null}
           currentData={page === 'form' ? { ...irsSelections, ...stepData } : null}
@@ -1350,7 +1597,6 @@ export default function DashboardPage() {
             if (actualPage === 'settings') {
               const subMap: Record<string, SettingsTab> = {
                 'profile': 'edit-profile', 'settings-profile': 'edit-profile',
-                'preference': 'preferences', 'preferences': 'preferences', 'model': 'preferences', 'settings-preference': 'preferences',
                 'security': 'security', 'password': 'security', 'change-password': 'security', 'settings-password': 'security'
               };
               const subKey = sub || targetRaw;
@@ -1371,6 +1617,7 @@ export default function DashboardPage() {
           }
         }} />
       </div>
+      )}
     </div>
   );
 }

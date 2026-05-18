@@ -1,10 +1,12 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { motion, useInView, useScroll, useTransform, useAnimationControls } from 'framer-motion';
+import { isAuthenticated } from '../../../lib/api';
 
 export default function Hero() {
+    const [loggedIn, setLoggedIn] = useState(false);
     const heroRef = useRef<HTMLElement>(null);
     const logoRef = useRef<HTMLDivElement>(null);
     const logoControls = useAnimationControls();
@@ -12,6 +14,18 @@ export default function Hero() {
     const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
     const heroY = useTransform(scrollYProgress, [0, 1], [0, 60]);
     const heroOpacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+
+    // Auth detection
+    useEffect(() => {
+        const check = () => setLoggedIn(isAuthenticated());
+        check();
+        window.addEventListener('focus', check);
+        window.addEventListener('storage', check);
+        return () => {
+            window.removeEventListener('focus', check);
+            window.removeEventListener('storage', check);
+        };
+    }, []);
 
     // Desktop only: pause/resume rotation on scroll
     useEffect(() => {
@@ -145,7 +159,8 @@ export default function Hero() {
                     </div>
                 </motion.div>
 
-                {/* ── CTAs — side by side on all screens ── */}
+                {/* ── CTAs — side by side on all screens, hidden when logged in ── */}
+                {!loggedIn && (
                 <motion.div
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -162,6 +177,7 @@ export default function Hero() {
                         Create account
                     </Link>
                 </motion.div>
+                )}
 
                 {/* ── Stats Strip — 2×2 on mobile, 4-col on lg ── */}
                 <motion.div

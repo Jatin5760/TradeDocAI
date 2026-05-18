@@ -4,5 +4,7 @@
     "templates/IRS_Confirmation",
     "templates/CDS_Confirmation",
     "templates/Equity_TRS"
-  ]
+  ],
+  "reportMissingImports": "none",
+  "reportMissingTypeStubs": "none"
 }

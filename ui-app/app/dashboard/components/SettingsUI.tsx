@@ -22,11 +22,6 @@ const defaultProfile: UserProfile = {
   country: '',
 };
 
-function getSavedModel() {
-  if (typeof window === 'undefined') return 'gemini-2.0-flash';
-  return localStorage.getItem('preferredModel') || 'gemini-2.0-flash';
-}
-
 function getSavedProfile(): UserProfile {
   if (typeof window === 'undefined') return defaultProfile;
   const userStr = localStorage.getItem('user');
@@ -57,14 +52,7 @@ interface SettingsUIProps {
 export default function SettingsUI({ initialTab = 'edit-profile', onTabChange, onShowToast }: SettingsUIProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [isSaving, setIsSaving] = useState(false);
-  const [selectedModel, setSelectedModel] = useState(getSavedModel);
   const [profile, setProfile] = useState<UserProfile>(getSavedProfile);
-
-  const handleSaveModel = (model: string) => {
-    setSelectedModel(model);
-    localStorage.setItem('preferredModel', model);
-    if (onShowToast) onShowToast(`✅ Model updated: ${model}`);
-  };
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
@@ -135,16 +123,7 @@ export default function SettingsUI({ initialTab = 'edit-profile', onTabChange, o
 
   const tabs = [
     { id: 'edit-profile' as SettingsTab, label: 'Edit Profile' },
-    { id: 'preferences' as SettingsTab, label: 'Preferences' },
     { id: 'security' as SettingsTab, label: 'Security' },
-  ];
-
-  const models = [
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: 'Highest quality, best for complex trades' },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Faster, good for simple documents' },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', desc: 'Stable, high accuracy' },
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', desc: 'Stable & very fast' },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', desc: 'Latest experimental model' },
   ];
 
   const handleChange = (field: string, val: string) => {
@@ -247,39 +226,7 @@ export default function SettingsUI({ initialTab = 'edit-profile', onTabChange, o
             </div>
           )}
 
-          {/* 2. Preferences Tab */}
-          {activeTab === 'preferences' && (
-            <div className="max-w-2xl flex flex-col gap-8">
-              <div>
-                <h2 className="text-lg font-bold text-text-secondary mb-2">AI Model Preference</h2>
-                <p className="text-sm text-text-tertiary">Select which Gemini model to use for trade extraction and analysis.</p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                {models.map((model) => (
-                  <button
-                    key={model.id}
-                    onClick={() => handleSaveModel(model.id)}
-                  className={`flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-5 rounded-2xl border transition-all text-left ${
-                      selectedModel === model.id 
-                        ? 'border-primary bg-primary/5 ring-1 ring-primary' 
-                        : 'border-border-secondary hover:border-primary/50 bg-white'
-                    }`}
-                  >
-                    <div className="flex flex-col gap-1">
-                      <span className="font-bold text-text-secondary">{model.name}</span>
-                      <span className="text-xs text-text-tertiary">{model.desc}</span>
-                    </div>
-                    {selectedModel === model.id && (
-                      <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-white text-[10px]">✓</div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 3. Security Tab */}
+          {/* 2. Security Tab */}
           {activeTab === 'security' && (
             <div className="max-w-md flex flex-col gap-8">
               <div>

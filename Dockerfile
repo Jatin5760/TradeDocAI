@@ -11,15 +11,32 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     fontconfig \
-    lmodern \
     perl \
-    texlive-latex-base \
-    texlive-latex-recommended \
-    texlive-latex-extra \
-    texlive-fonts-recommended \
     wget \
     xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# ============================================================
+# TinyTeX (pdflatex) — slim alternative to texlive
+# ============================================================
+RUN wget -qO- "https://yihui.org/tinytex/install-bin-unix.sh" | sh
+
+ENV PATH="/root/.TinyTeX/bin/x86_64-linux:${PATH}"
+
+# ============================================================
+# Required LaTeX packages
+# ============================================================
+RUN tlmgr update --self && tlmgr install \
+    geometry \
+    fancyhdr \
+    enumitem \
+    lm \
+    tools \
+    parskip \
+    helvetic \
+    microtype
+
+RUN pdflatex --version
 
 FROM node:20-bookworm-slim AS ui-build
 WORKDIR /ui-app

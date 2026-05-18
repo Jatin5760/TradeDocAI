@@ -11,7 +11,6 @@ Usage:
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import argparse
@@ -26,16 +25,11 @@ TEMPLATE_FILE = "equity_trs_template.tex"
 OUTPUT_DIR    = os.path.join(_BASE_DIR, "output_confirmations")
 
 # Auto-detect pdflatex path
-PDFLATEX      = shutil.which("pdflatex") or "/Library/TeX/texbin/pdflatex"
-PDFLATEX_TIMEOUT_SECONDS = int(os.environ.get("PDFLATEX_TIMEOUT_SECONDS", "45"))
+PDFLATEX      = shutil.which("pdflatex") or \
+                r"C:\Users\sanja\AppData\Local\Programs\MiKTeX\miktex\bin\x64\pdflatex.exe"
 
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-
-def _safe_filename(value):
-    value = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or ""))
-    return value.strip("._") or "Document"
 
 
 def load_trade_data(json_path=None):
@@ -89,8 +83,8 @@ def compile_to_pdf(tex_content, trade_data, output_dir=None):
 
     # Naming convention: Confirmation_TRS_[Model]_[PartyA]_[Date]
     model    = trade_data.get("model_type", "I")
-    party_a  = _safe_filename(trade_data.get("party_a_name", "PartyA"))
-    date     = _safe_filename(trade_data.get("trade_date", "Date"))
+    party_a  = trade_data.get("party_a_name", "PartyA").replace(" ", "_")
+    date     = trade_data.get("trade_date", "Date").replace(" ", "_").replace("/", "-")
     name     = f"Confirmation_EquityTRS_Model{model}_{party_a}_{date}"
 
     tex_path = os.path.join(out_dir, f"{name}.tex")
@@ -101,15 +95,11 @@ def compile_to_pdf(tex_content, trade_data, output_dir=None):
     print(f"  ✅ .tex written: {tex_path}")
 
     print("  ⏳ Compiling PDF (pdflatex)...")
-    try:
-        result = subprocess.run(
-            [PDFLATEX, "-interaction=nonstopmode",
-             "-output-directory", out_dir, tex_path],
-            capture_output=True, text=True, timeout=PDFLATEX_TIMEOUT_SECONDS
-        )
-    except subprocess.TimeoutExpired:
-        print(f"  ❌ Compilation timed out after {PDFLATEX_TIMEOUT_SECONDS}s")
-        return None
+    result = subprocess.run(
+        [PDFLATEX, "-interaction=nonstopmode",
+         "-output-directory", out_dir, tex_path],
+        capture_output=True, text=True
+    )
 
     if os.path.exists(pdf_path):
         print(f"  ✅ PDF generated: {pdf_path}")

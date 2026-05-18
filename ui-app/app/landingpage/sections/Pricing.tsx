@@ -14,8 +14,8 @@ export default function Pricing() {
                             viewport={{ once: true }}
                             transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
                         >
-                            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-5xl text-slate-800 font-bold mb-4 flex flex-wrap items-center justify-center gap-x-2 sm:gap-x-4 gap-y-2">
-                                <span className="bg-indigo-600 text-white px-4 sm:px-5 py-2 rounded-2xl shadow-xl shadow-indigo-100 inline-block">TradeDocAI</span>
+                            <h2 className="font-display text-2xl sm:text-3xl md:text-4xl lg:text-5xl text-slate-800 mb-4 flex flex-wrap items-center justify-center gap-x-2 sm:gap-x-4 gap-y-2">
+                                <span className="bg-indigo-600 text-white px-3 sm:px-5 py-1.5 rounded-2xl shadow-xl shadow-indigo-100 inline-block">TradeDocAI</span>
                                 <span>Cost vs Traditional Costs</span>
                             </h2>
                             <p className="text-slate-500 max-w-2xl mx-auto text-base">Significant operational savings with institutional-grade precision.</p>

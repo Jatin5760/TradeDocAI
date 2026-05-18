@@ -20,6 +20,9 @@ google-genai>=1.0
 # ── Environment Variables ─────────────────
 python-dotenv>=1.0
 
+# ── Google Cloud Storage ──────────────────
+google-cloud-storage>=2.15
+
 # ── Adobe PDF Services SDK v4 ─────────────
 pdfservices-sdk>=4.2.0
 

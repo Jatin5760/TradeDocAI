@@ -12,6 +12,7 @@ interface SidebarProps {
   activePage: string;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  hidden?: boolean;
 }
 
 const NAV_GROUPS = [
@@ -52,7 +53,7 @@ const NAV_GROUPS = [
   }
 ];
 
-export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPage, activePage, isMobileOpen = false, onCloseMobile }: SidebarProps) {
+export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPage, activePage, isMobileOpen = false, onCloseMobile, hidden = false }: SidebarProps) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [mounted, setMounted] = useState(false);
   
@@ -77,7 +78,9 @@ export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPa
       <aside
         className={`fixed flex flex-col shrink-0 z-40 overflow-y-auto transition-transform duration-300 lg:static lg:w-[260px] lg:translate-x-0 ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full'
-        } inset-y-0 left-0 w-[280px] h-full rounded-r-[24px] lg:rounded-none lg:inset-y-0 lg:left-0 lg:w-[260px] lg:h-auto`}
+        } inset-y-0 left-0 w-[280px] h-full rounded-r-[24px] lg:rounded-none lg:inset-y-0 lg:left-0 lg:w-[260px] lg:h-auto ${
+          hidden ? '!hidden' : ''
+        }`}
         style={{
           background: 'var(--background)',
           borderRight: '1px solid var(--border)',

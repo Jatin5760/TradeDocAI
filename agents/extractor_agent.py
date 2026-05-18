@@ -292,8 +292,7 @@ Floating Payment & Settlement:
 - "reference_price" ← Look for "Reference Price:" (typically "100%")
 
 Additional Provisions:
-- "fixed_recovery_final_price" ← For Fixed Recovery CDS, the pre-agreed final price (e.g. "40%")
-- "recovery_lock_reference_price" ← For Recovery Lock CDS (e.g. "40%")
+- "specific_additional_provisions" ← For specific additional provisions like Fixed Recovery CDS, Recovery Lock, or Monoline Insurer. Return as array of {{"title": "...", "description": "..."}}.
 
 Logistics:
 - "party_a_office" ← Look for "Party A Office:" or "Office for Party A:"
@@ -419,7 +418,7 @@ def extract_trade_data(state: DocForgeState) -> DocForgeState:
             extra_rules=extra_rules
         )
 
-        text = call_gemini(prompt, model_name=state.get("model"))
+        text = call_gemini(prompt)
 
         # Robustly strip markdown code fences (e.g. ```json ... ```)
         # Must strip whitespace BEFORE checking endswith, old code had this bug
@@ -433,11 +432,11 @@ def extract_trade_data(state: DocForgeState) -> DocForgeState:
             text = match.group(0)
 
         extracted = json.loads(text)
-        print(f"  ✅ Extraction complete: {len(extracted)} fields populated")
+        print(f"  [SUCCESS] Extraction complete: {len(extracted)} fields populated")
 
         # Quick quality check: count non-empty fields
         filled = sum(1 for v in extracted.values() if v and v != "" and v != [])
-        print(f"  📊 {filled}/{len(extracted)} fields have data")
+        print(f"  [INFO] {filled}/{len(extracted)} fields have data")
 
         return {
             **state,
@@ -446,5 +445,5 @@ def extract_trade_data(state: DocForgeState) -> DocForgeState:
         }
 
     except Exception as e:
-        print(f"  ❌ Extraction failed: {e}")
+        print(f"  [ERROR] Extraction failed: {e}")
         return {**state, "error": f"Extraction failed: {str(e)}"}

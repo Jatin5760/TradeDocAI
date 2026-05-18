@@ -11,7 +11,6 @@ Usage:
 
 import json
 import os
-import re
 import shutil
 import subprocess
 import argparse
@@ -25,16 +24,11 @@ TEMPLATE_DIR  = os.path.join(_BASE_DIR, "templates")
 TEMPLATE_FILE = "irs_confirmation_template.tex"
 OUTPUT_DIR    = os.path.join(_BASE_DIR, "output_confirmations")
 # Auto-detect pdflatex path — works on Windows (MiKTeX) and Linux/Docker (TeX Live)
-PDFLATEX      = shutil.which("pdflatex") or "/Library/TeX/texbin/pdflatex"
-PDFLATEX_TIMEOUT_SECONDS = int(os.environ.get("PDFLATEX_TIMEOUT_SECONDS", "45"))
+PDFLATEX      = shutil.which("pdflatex") or \
+                r"C:\Users\sanja\AppData\Local\Programs\MiKTeX\miktex\bin\x64\pdflatex.exe"
 
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-
-def _safe_filename(value):
-    value = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or ""))
-    return value.strip("._") or "Document"
 
 
 def load_trade_data(json_path=None):
@@ -73,8 +67,8 @@ def compile_to_pdf(tex_content, trade_data, output_dir=None):
     os.makedirs(out_dir, exist_ok=True)
 
     exhibit  = trade_data.get("exhibit", "XX")
-    party_a  = _safe_filename(trade_data.get("party_a_name", "PartyA"))
-    date     = _safe_filename(trade_data.get("trade_date", "Date"))
+    party_a  = trade_data.get("party_a_name", "PartyA").replace(" ", "_")
+    date     = trade_data.get("trade_date", "").replace(" ", "_")
     name     = f"Confirmation_Exhibit{exhibit}_{party_a}_{date}"
 
     tex_path = os.path.join(out_dir, f"{name}.tex")
@@ -85,15 +79,11 @@ def compile_to_pdf(tex_content, trade_data, output_dir=None):
     print(f"  ✅ .tex written: {tex_path}")
 
     print("  ⏳ Compiling PDF...")
-    try:
-        result = subprocess.run(
-            [PDFLATEX, "-interaction=nonstopmode",
-             "-output-directory", out_dir, tex_path],
-            capture_output=True, text=True, timeout=PDFLATEX_TIMEOUT_SECONDS
-        )
-    except subprocess.TimeoutExpired:
-        print(f"  ❌ Compilation timed out after {PDFLATEX_TIMEOUT_SECONDS}s")
-        return None
+    result = subprocess.run(
+        [PDFLATEX, "-interaction=nonstopmode",
+         "-output-directory", out_dir, tex_path],
+        capture_output=True, text=True
+    )
 
     if os.path.exists(pdf_path):
         print(f"  ✅ PDF generated: {pdf_path}")
@@ -127,30 +117,35 @@ def generate_pdf(trade_data: dict, output_dir: str = None) -> str:
 
 
 def _escape_latex(data):
-    """Recursively escape LaTeX special characters (&, %, $, #, etc.) in values.
-    Handles nested dicts, lists, and skips already-escaped characters."""
-    if isinstance(data, dict):
-        return {k: _escape_latex(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [_escape_latex(i) for i in data]
-    elif isinstance(data, str):
-        chars = {
-            '&': r'\&',
-            '%': r'\%',
-            '$': r'\$',
-            '#': r'\#',
-            '_': r'\_',
-            '{': r'\{',
-            '}': r'\}',
-            '~': r'\textasciitilde{}',
-            '^': r'\textasciicircum{}'
-        }
-        res = data
-        for char, escaped in chars.items():
-            if f"\\{char}" not in res:
-                res = res.replace(char, escaped)
-        return res
-    return data
+    """Escape LaTeX special characters in trade data values."""
+    escaped = {}
+    for key, value in data.items():
+        if isinstance(value, str):
+            # Escape % for LaTeX (but not already escaped ones)
+            value = value.replace('\\%', '__ESCAPED_PCT__')
+            value = value.replace('%', '\\%')
+            value = value.replace('__ESCAPED_PCT__', '\\%')
+            # Escape & for LaTeX
+            value = value.replace('\\&', '__ESCAPED_AMP__')
+            value = value.replace('&', '\\&')
+            value = value.replace('__ESCAPED_AMP__', '\\&')
+            escaped[key] = value
+        elif isinstance(value, list):
+            escaped[key] = [_escape_latex_item(item) for item in value]
+        else:
+            escaped[key] = value
+    return escaped
+
+
+def _escape_latex_item(item):
+    """Escape LaTeX chars in a list item (string or dict)."""
+    if isinstance(item, str):
+        item = item.replace('%', '\\%').replace('&', '\\&')
+        return item
+    elif isinstance(item, dict):
+        return {k: v.replace('%', '\\%').replace('&', '\\&') if isinstance(v, str) else v
+                for k, v in item.items()}
+    return item
 
 
 def main():
