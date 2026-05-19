@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { API_BASE, authHeaders, clearSession } from '../../../lib/api';
+import { API_BASE, authHeaders } from '../../../lib/api';
 
 interface Message {
   id?: string;
@@ -17,13 +16,6 @@ interface ChatCopilotProps {
   docType?: string | null;
   schema?: unknown;
   currentData?: Record<string, unknown> | null;
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  created_at: string;
-  updated_at: string;
 }
 
 interface SpeechRecognitionResultItem {
@@ -67,13 +59,10 @@ const initialMessages: Message[] = [
 ];
 
 export default function ChatCopilot({ onNavigate, docType, schema, currentData }: ChatCopilotProps) {
-  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [sessionId, setSessionId] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isVoiceMessage, setIsVoiceMessage] = useState(false);
@@ -183,59 +172,11 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isTyping, isLoadingHistory]);
+  }, [messages, isTyping]);
 
-  useEffect(() => {
-    const loadLatestSession = async () => {
-      setIsLoadingHistory(true);
-      try {
-        const response = await fetch(`${API_BASE}/api/chat/sessions`, {
-          headers: authHeaders(),
-        });
-        if (response.status === 401) {
-          clearSession();
-          router.push('/');
-          return;
-        }
-        if (!response.ok) return;
-
-        const data: { sessions?: ChatSession[] } = await response.json();
-        const latest = data.sessions?.[0];
-        if (!latest) return;
-
-        setSessionId(latest.id);
-        const messagesResponse = await fetch(`${API_BASE}/api/chat/sessions/${latest.id}/messages`, {
-          headers: authHeaders(),
-        });
-        if (!messagesResponse.ok) return;
-
-        const messagesData: { messages?: Message[] } = await messagesResponse.json();
-        setMessages(messagesData.messages?.length ? messagesData.messages : initialMessages);
-      } catch (error) {
-        console.error('Failed to load chat history', error);
-      } finally {
-        setIsLoadingHistory(false);
-      }
-    };
-
-    loadLatestSession();
-  }, [router]);
-
-  const handleClearChat = async () => {
+  const handleClearChat = () => {
     stopSpeaking();
-    const currentSessionId = sessionId;
-    setSessionId('');
     setMessages(initialMessages);
-    if (!currentSessionId) return;
-
-    try {
-      await fetch(`${API_BASE}/api/chat/sessions/${currentSessionId}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      });
-    } catch (error) {
-      console.error('Failed to clear chat history', error);
-    }
   };
 
   const handleSend = async (messageOverride?: string) => {
@@ -263,7 +204,6 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
     try {
       const payload = {
         message: payloadMsg,
-        session_id: sessionId || undefined,
         doc_type: docType || undefined,
         schema: schema || undefined,
         current_data: currentData || undefined,
@@ -279,8 +219,7 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
       });
 
       if (response.status === 401) {
-        clearSession();
-        router.push('/');
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Your session has expired. Please log in again.' }]);
         return;
       }
 
@@ -291,9 +230,6 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
 
       const reply = data.reply || 'Sorry, I encountered an error.';
       const action = data.action;
-      if (data.session?.id) {
-        setSessionId(data.session.id);
-      }
 
       setMessages(prev => [...prev, { role: 'assistant', content: reply, action }]);
       
@@ -420,7 +356,7 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
                   )}
                 </div>
               ))}
-              {(isTyping || isLoadingHistory) && (
+              {isTyping && (
                 <div className="flex justify-start">
                   <div className="bg-white border border-gray-100 p-4 rounded-[20px] rounded-tl-none flex gap-1 items-center">
                     <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce" />
@@ -489,7 +425,7 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
                   <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                 </button>
               </div>
-              <p className="mt-2 sm:mt-3 text-[9px] sm:text-[10px] text-center text-gray-400 font-bold uppercase tracking-widest">Powered by Gemini 2.5 Flash</p>
+              <p className="mt-2 sm:mt-3 text-[9px] sm:text-[10px] text-center text-gray-400 font-bold uppercase tracking-widest">Powered by Groq Llama 4 Scout</p>
             </div>
           </motion.div>
         )}

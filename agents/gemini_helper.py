@@ -78,42 +78,43 @@ def call_gemini(prompt: str, max_retries: int = 5, model_name: str | None = None
     raise Exception("Gemini API could not fulfill the request after all retries.")
 
 
-def call_gemini_stream(prompt: str, model_name: str | None = None, generation_config: dict | None = None):
+def call_gemini_stream(prompt: str, model_name: str | None = None, generation_config: dict | None = None, max_retries: int = 2):
     """
-    Call Gemini for text-only tasks with streaming — buffers 2-3 words per chunk
-    for smooth, fast SSE that feels like ChatGPT.
+    Call Gemini for text-only tasks with streaming — yields each token chunk
+    immediately from the API for real-time ChatGPT-like typing effect.
+    Retries on 503/429 with brief waits.
     
     Yields:
-        str chunks of 2-3 words each, or full lines on newline.
+        str chunks as they arrive from Gemini (typically 1-5 tokens each).
     """
+    import time as _time
     use_model = model_name or MODEL
-    config = types.GenerateContentConfig(**generation_config) if generation_config else None
+    # Cap output tokens for speed — local chat responses should be short
+    gc = generation_config or {}
+    gc.setdefault("max_output_tokens", 200)
+    config = types.GenerateContentConfig(**gc)
     
-    try:
-        stream = _get_client().models.generate_content_stream(
-            model=use_model,
-            contents=prompt,
-            config=config
-        )
-        buffer = ""
-        word_target = 0
-        for chunk in stream:
-            if chunk.text:
-                buffer += chunk.text
-                spaces = buffer.count(" ")
-                if spaces >= word_target:
-                    yield buffer
-                    buffer = ""
-                    word_target = 2  # batch 2-3 words
-                elif "\n" in buffer:
-                    yield buffer
-                    buffer = ""
-                    word_target = 2
-        if buffer:
-            yield buffer
-    except Exception as e:
-        print(f"  ❌ Gemini Stream Error: {e}")
-        yield f"[Error: {str(e)[:100]}]"
+    for attempt in range(max_retries):
+        try:
+            stream = _get_client().models.generate_content_stream(
+                model=use_model,
+                contents=prompt,
+                config=config
+            )
+            for chunk in stream:
+                if chunk.text:
+                    yield chunk.text
+            return  # success — exit retry loop
+        except Exception as e:
+            error_str = str(e).upper()
+            is_retryable = any(msg in error_str for msg in ["429", "503", "500", "RESOURCE_EXHAUSTED", "UNAVAILABLE"])
+            if is_retryable and attempt < max_retries - 1:
+                wait = (attempt + 1) * 1.5
+                print(f"  ⏳ Gemini Stream retry in {wait}s (attempt {attempt+1})")
+                _time.sleep(wait)
+            else:
+                print(f"  ❌ Gemini Stream Error: {e}")
+                yield f"[Error: {str(e)[:100]}]"
 
 
 def call_gemini_with_pdf(prompt: str, pdf_path: str, max_retries: int = 3, model_name: str | None = None) -> str:

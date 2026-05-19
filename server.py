@@ -34,6 +34,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from urllib.parse import unquote, urlparse
 import re
+import random
 from dotenv import load_dotenv
 load_dotenv()  # local development only; production injects env vars at runtime
 from bson import ObjectId
@@ -71,7 +72,8 @@ sys.path.insert(0, os.path.join(ROOT_DIR, "templates", "Equity_TRS"))
 
 # Import LangGraph flows
 from agents.graph import ai_create_graph, pdf_compile_graph, validation_graph
-from agents.gemini_helper import call_gemini, call_gemini_stream
+from agents.groq_helper import call_groq, call_groq_stream
+from agents.gemini_helper import call_gemini  # still used by classifier / extractor / validator
 
 # Import raw generators as fallback for direct PDF compilation
 # Lazy imports with fallbacks — prevents entire server from crashing
@@ -319,90 +321,17 @@ def require_auth(fn):
     return wrapper
 
 
-def _serialise_chat_session(session: dict) -> dict:
-    return {
-        "id": str(session["_id"]),
-        "title": session.get("title", "New chat"),
-        "created_at": session.get("created_at", ""),
-        "updated_at": session.get("updated_at", ""),
-    }
-
-
-def _serialise_chat_message(message: dict) -> dict:
-    return {
-        "id": str(message["_id"]),
-        "session_id": str(message["session_id"]),
-        "role": message.get("role", "assistant"),
-        "content": message.get("content", ""),
-        "action": message.get("action"),
-        "created_at": message.get("created_at", ""),
-    }
-
-
-def _chat_session_for_user(db, session_id: str | None):
-    if not session_id:
-        return None
-    try:
-        return db.chat_sessions.find_one({
-            "_id": ObjectId(session_id),
-            "user_id": g.current_user_id,
-        })
-    except InvalidId:
-        return None
-
-
-def _create_chat_session(db, first_message: str = "") -> dict:
-    now = _iso_now()
-    title = first_message.strip().replace("\n", " ")[:60] or "New chat"
-    session = {
-        "user_id": g.current_user_id,
-        "title": title,
-        "created_at": now,
-        "updated_at": now,
-    }
-    result = db.chat_sessions.insert_one(session)
-    session["_id"] = result.inserted_id
-    return session
-
-
-def _save_chat_message(db, session_id: ObjectId, role: str, content: str, action: str | None = None) -> dict:
-    now = _iso_now()
-    message = {
-        "session_id": session_id,
-        "user_id": g.current_user_id,
-        "role": role,
-        "content": content,
-        "action": action,
-        "created_at": now,
-    }
-    result = db.chat_messages.insert_one(message)
-    message["_id"] = result.inserted_id
-    db.chat_sessions.update_one(
-        {"_id": session_id, "user_id": g.current_user_id},
-        {"$set": {"updated_at": now}},
-    )
-    return message
-
-
-def _load_chat_history(db, session_id: ObjectId, limit: int = 20) -> list[dict]:
-    messages = list(
-        db.chat_messages.find({"session_id": session_id, "user_id": g.current_user_id})
-        .sort("created_at", -1)
-        .limit(limit)
-    )
-    messages.reverse()
-    return messages
-
-
-def _build_chat_prompt(user_msg: str, history: list[dict]) -> str:
+def _build_chat_prompt(user_msg: str) -> str:
+    """Build prompt for global ChatCopilot — stateless, no history."""
     current_time = datetime.now(timezone.utc).strftime("%B %d, %Y")
     prompt = f"You are TradeDoc Copilot, a helpful and intelligent AI assistant. Today's date is {current_time}. "
     prompt += "While you specialize in TradeDoc AI (derivatives like IRS, CDS, FX NDF, Equity TRS), you are happy to help with general questions too. "
-    prompt += "Be conversational, friendly, and smart. "
+    prompt += "Be conversational, friendly, and smart. Keep responses concise — 30-60 words, never exceed 90 words. "
+    prompt += "Reply in plain text sentences — no markdown, no bullet lists, no bold, no headings. "
     prompt += "CRITICAL NAVIGATION RULES:\n"
     prompt += "1. If the user mentions 'manual', 'form', 'create', or 'entry', YOU MUST use the 'form-' tokens (e.g., [NAVIGATE:form-irs]).\n"
     prompt += "2. If the user mentions 'extract', 'upload', 'file', or 'AI extraction', use the 'ai' token (e.g., [NAVIGATE:ai]).\n"
-    prompt += "3. If the user's request is ONLY navigation, respond ONLY with the token.\n\n"
+    prompt += "3. For navigation requests, use the token AND a short friendly reply like 'Sure, let's go to Settings!' or 'Taking you to Analytics!'\n\n"
     prompt += "Possible page names and their meanings:\n"
     prompt += "- landing: Home, Dashboard, Overview\n"
     prompt += "- analytics: Charts, Performance, Analytics, Stats\n"
@@ -416,13 +345,133 @@ def _build_chat_prompt(user_msg: str, history: list[dict]) -> str:
     prompt += "- form-cds: Manual Credit Default Swap form, Create CDS trade\n"
     prompt += "- form-equity_trs: Manual Equity TRS form, Create TRS trade\n"
     prompt += "Example: [NAVIGATE:form-irs]\n\n"
-
-    for msg in history:
-        role = "User" if msg.get("role") == "user" else "Assistant"
-        prompt += f"{role}: {msg.get('content', '')}\n"
-
     prompt += f"User: {user_msg}\nAssistant:"
     return prompt
+
+# ── Local Form Assistant Helpers ─────────────────────────
+
+
+
+def _doc_display_name(doc_type: str) -> str:
+    name_map = {
+        "fx_ndf": "FX Non-Deliverable Forward (NDF)",
+        "irs": "Interest Rate Swap (IRS)",
+        "cds": "Credit Default Swap (CDS)",
+        "equity_trs": "Equity Total Return Swap (TRS)",
+    }
+    return name_map.get(doc_type, doc_type.upper())
+
+
+def _is_value_filled(val: object) -> bool:
+    if val is None:
+        return False
+    if isinstance(val, str):
+        return val.strip() != ""
+    if isinstance(val, (list, tuple, set)):
+        return len(val) > 0
+    if isinstance(val, dict):
+        return len(val) > 0
+    return True
+
+
+def _matches_show_when(show_when: dict | None, data: dict) -> bool:
+    if not show_when:
+        return True
+    field = show_when.get("field")
+    target_val = show_when.get("value")
+    operator = show_when.get("operator") or "equal"
+    src_val = data.get(field)
+    if operator == "not_equal":
+        return src_val != target_val
+    return src_val == target_val
+
+
+def _section_is_visible(section: dict, doc_type: str, data: dict) -> bool:
+    if not section:
+        return False
+    if doc_type == "irs":
+        exhibits = section.get("show_for_exhibits") or []
+        if exhibits and data.get("exhibit") not in exhibits:
+            return False
+        termination = section.get("show_for_termination")
+        if termination and data.get("termination_type") != termination:
+            return False
+        if not (section.get("always_show") or exhibits or termination):
+            return False
+    elif doc_type == "equity_trs":
+        models = section.get("show_for_models") or []
+        if models and data.get("model_type") not in models:
+            return False
+    if not _matches_show_when(section.get("show_when"), data):
+        return False
+    return True
+
+
+def _field_is_visible(field: dict, data: dict) -> bool:
+    return _matches_show_when(field.get("show_when"), data)
+
+
+def _iter_visible_fields(schema: dict, data: dict, doc_type: str):
+    sections = schema.get("sections", {})
+    if isinstance(sections, list):
+        for sec in sections:
+            if not _section_is_visible(sec, doc_type, data):
+                continue
+            sec_title = sec.get("title", sec.get("id", ""))
+            for field in sec.get("fields", []) or []:
+                if _field_is_visible(field, data):
+                    yield sec_title, field
+            for sub in sec.get("subsections", []) or []:
+                sub_title = sub.get("title", sec_title)
+                for field in sub.get("fields", []) or []:
+                    if _field_is_visible(field, data):
+                        yield sub_title, field
+    elif isinstance(sections, dict):
+        for sec_key, sec in sections.items():
+            if not _section_is_visible(sec, doc_type, data):
+                continue
+            sec_title = sec.get("title", sec_key)
+            for field in sec.get("fields", []) or []:
+                if _field_is_visible(field, data):
+                    yield sec_title, field
+            for sub in sec.get("subsections", []) or []:
+                sub_title = sub.get("title", sec_title)
+                for field in sub.get("fields", []) or []:
+                    if _field_is_visible(field, data):
+                        yield sub_title, field
+
+
+
+
+
+def _nav_friendly_name(action: str) -> str:
+    """Map internal action codes to user-friendly page names."""
+    names = {
+        "landing": "Dashboard",
+        "analytics": "Analytics",
+        "ai": "AI Extraction",
+        "settings-profile": "Settings",
+        "settings-preference": "Preferences",
+        "settings-password": "Security",
+        "my-documents": "My Documents",
+        "form-fx_ndf": "FX NDF Form",
+        "form-irs": "IRS Form",
+        "form-cds": "CDS Form",
+        "form-equity_trs": "Equity TRS Form",
+    }
+    return names.get(action, action.replace("-", " ").title())
+
+_NAV_REPLIES = [
+    "Sure, let's go to {page}!",
+    "Heading towards {page}.",
+    "Launching {page} for you.",
+    "Taking you to {page} now.",
+    "Opening {page} — one moment.",
+    "Right away, navigating to {page}.",
+]
+
+def _nav_reply(action: str) -> str:
+    return random.choice(_NAV_REPLIES).format(page=_nav_friendly_name(action))
 
 
 def _extract_chat_action(reply: str, user_msg: str) -> tuple[str, str | None]:
@@ -464,7 +513,7 @@ def _extract_chat_action(reply: str, user_msg: str) -> tuple[str, str | None]:
         nav_only_phrases = ["navigate", "go to", "show", "open", "take me to", "switch to"]
         is_nav_only = any(user_msg.lower().startswith(p) for p in nav_only_phrases) or not reply.strip()
         if is_nav_only and not re.search(r"\?", user_msg):
-            reply = f"Sure, opening {action.replace('-', ' ')} for you."
+            reply = _nav_reply(action)
 
     return reply, action
 
@@ -839,76 +888,6 @@ def api_auth_me():
     return jsonify({"user": _public_user(g.current_user)})
 
 
-@app.route("/api/chat/sessions", methods=["GET"])
-@require_auth
-def api_list_chat_sessions():
-    try:
-        sessions = list(
-            get_db().chat_sessions.find({"user_id": g.current_user_id}).sort("updated_at", -1)
-        )
-        return jsonify({"sessions": [_serialise_chat_session(session) for session in sessions]})
-    except Exception as e:
-        if isinstance(e, (ServerSelectionTimeoutError, PyMongoError)):
-            return _database_error_response(e)
-        traceback.print_exc()
-        return jsonify({"error": "Failed to load chat sessions"}), 500
-
-
-@app.route("/api/chat/sessions", methods=["POST"])
-@require_auth
-def api_create_chat_session():
-    try:
-        body = _json_body(required=False)
-        session = _create_chat_session(get_db(), str(body.get("title", "")))
-        return jsonify({"session": _serialise_chat_session(session)}), 201
-    except Exception as e:
-        if isinstance(e, (ServerSelectionTimeoutError, PyMongoError)):
-            return _database_error_response(e)
-        traceback.print_exc()
-        return jsonify({"error": "Failed to create chat session"}), 500
-
-
-@app.route("/api/chat/sessions/<session_id>/messages", methods=["GET"])
-@require_auth
-def api_list_chat_messages(session_id):
-    try:
-        db = get_db()
-        session = _chat_session_for_user(db, session_id)
-        if not session:
-            return jsonify({"error": "Chat session not found"}), 404
-        messages = list(
-            db.chat_messages.find({"session_id": session["_id"], "user_id": g.current_user_id})
-            .sort("created_at", 1)
-        )
-        return jsonify({
-            "session": _serialise_chat_session(session),
-            "messages": [_serialise_chat_message(message) for message in messages],
-        })
-    except Exception as e:
-        if isinstance(e, (ServerSelectionTimeoutError, PyMongoError)):
-            return _database_error_response(e)
-        traceback.print_exc()
-        return jsonify({"error": "Failed to load chat messages"}), 500
-
-
-@app.route("/api/chat/sessions/<session_id>", methods=["DELETE"])
-@require_auth
-def api_delete_chat_session(session_id):
-    try:
-        db = get_db()
-        session = _chat_session_for_user(db, session_id)
-        if not session:
-            return jsonify({"error": "Chat session not found"}), 404
-        db.chat_messages.delete_many({"session_id": session["_id"], "user_id": g.current_user_id})
-        db.chat_sessions.delete_one({"_id": session["_id"], "user_id": g.current_user_id})
-        return jsonify({"message": "Chat session deleted"})
-    except Exception as e:
-        if isinstance(e, (ServerSelectionTimeoutError, PyMongoError)):
-            return _database_error_response(e)
-        traceback.print_exc()
-        return jsonify({"error": "Failed to delete chat session"}), 500
-
-
 @app.route("/api/chat", methods=["POST"])
 @require_auth
 @limiter.limit("30 per minute")
@@ -925,131 +904,240 @@ def api_chat():
         scope = body.get("scope", "global")  # "local" = ChatSidebar form assistant, "global" = ChatCopilot
         stream = body.get("stream", False)   # SSE streaming for ChatGPT-like real-time output
 
-        # ── Local Scope (ChatSidebar — no DB, no session) ──
+        # ── Local Scope (ChatSidebar — Groq Llama 4 Scout, no DB, no session) ──
         if scope == "local" and doc_type and schema:
             msg_lower = user_msg.lower()
+            active_field_key = body.get("active_field_key")
+            active_field_label = body.get("active_field_label", "")
+            data_context = current_data or {}
 
-            # Detect intent: missing fields
+            # ── Helper: find a single field by key in the schema ──
+            def _find_field_in_schema(schema_obj, field_key):
+                if not schema_obj or not field_key:
+                    return None
+                sections = schema_obj.get("sections", {})
+                sec_list = list(sections.values()) if isinstance(sections, dict) else (sections if isinstance(sections, list) else [])
+                for sec in sec_list:
+                    for f in sec.get("fields", []) or []:
+                        if f.get("key") == field_key:
+                            return f
+                    for sub in sec.get("subsections", []) or []:
+                        for f in sub.get("fields", []) or []:
+                            if f.get("key") == field_key:
+                                return f
+                return None
+
+            # ── Helper: build filled-fields JSON for AI context ──
+            def _build_filled_context(data: dict) -> dict:
+                """Return only filled (non-empty) fields from current_data."""
+                filled = {}
+                for k, v in data.items():
+                    if _is_value_filled(v):
+                        # Truncate long values for prompt efficiency
+                        val_str = str(v)
+                        filled[k] = val_str[:120] + ("…" if len(val_str) > 120 else "")
+                return filled
+
+            # ── SSE response helpers ──
+            def _reply_local(reply: str, action: str | None = None):
+                """Non-streaming JSON response or fake-stream (single-token SSE)."""
+                if not stream:
+                    return jsonify({"reply": reply, "action": action, "session": None, "message": None})
+                # Fake SSE for non-streaming replies
+                def _fake_sse():
+                    yield f"data: {json.dumps({'token': reply})}\n\n"
+                    yield f"data: {json.dumps({'done': True, 'reply': reply, 'action': action})}\n\n"
+                return Response(
+                    _fake_sse(),
+                    mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+                )
+
+            def _groq_stream_response(prompt: str, max_tokens: int = 280):
+                """Real SSE token-by-token streaming from Groq."""
+                def generate():
+                    full_text = ""
+                    try:
+                        for token in call_groq_stream(prompt, max_tokens=max_tokens, temperature=0.2):
+                            full_text += token
+                            yield f"data: {json.dumps({'token': token})}\n\n"
+                        clean_text, action = _extract_chat_action(full_text, user_msg)
+                        yield f"data: {json.dumps({'done': True, 'reply': clean_text, 'action': action})}\n\n"
+                    except Exception as e:
+                        yield f"data: {json.dumps({'error': str(e)[:200]})}\n\n"
+                return Response(
+                    generate(),
+                    mimetype="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+                )
+
+            # ── Intent detection ──
+            doc_display = _doc_display_name(doc_type)
+            doc_aliases = {
+                "fx_ndf": ["fx ndf", "ndf", "fx forward"],
+                "irs": ["irs", "interest rate swap"],
+                "cds": ["cds", "credit default swap"],
+                "equity_trs": ["equity trs", "trs", "total return swap"],
+            }
+            mentions_doc = any(alias in msg_lower for alias in doc_aliases.get(doc_type, []))
+
             is_missing_check = any(kw in msg_lower for kw in [
                 "what's missing", "whats missing", "what is missing",
                 "missing fields", "remaining", "still need", "left to fill",
                 "not filled", "empty fields", "what else", "what do i need"
             ])
-            # Detect intent: mistake_check (only review filled, never mention missing)
-            is_mistake_check = any(kw in msg_lower for kw in [
-                "check", "mistake", "review", "verify", "error",
-                "wrong", "correct", "any issues", "look over"
-            ]) and not is_missing_check  # Don't route "what's missing" to mistake check
-            # Detect intent: field_explain
-            is_field_explain = any(kw in msg_lower for kw in [
-                "what does", "what is", "explain", "mean",
-                "definition", "define", "purpose of"
+            is_field_explain = bool(active_field_key) and any(kw in msg_lower for kw in [
+                "this field", "field meaning", "field definition", "explain this",
+                "explain field", "describe this", "definition", "define",
+                "purpose of", "example", "format", "how do i fill",
+                "what should i enter", "what should i put"
             ])
+            is_common_mistakes = any(kw in msg_lower for kw in [
+                "common mistake", "common mistakes", "common error", "typical error",
+                "what goes wrong", "common pitfall", "pitfalls", "gotcha",
+                "usually wrong", "often mistaken"
+            ])
+            is_mistake_check = any(kw in msg_lower for kw in [
+                "check my entries", "check entries", "review my entries",
+                "review", "verify", "validate", "mistake", "errors",
+                "wrong", "correct", "any issues", "look over"
+            ]) and not is_missing_check and not is_common_mistakes and not is_field_explain
+            is_form_overview = any(kw in msg_lower for kw in [
+                "what is", "about this form", "overview", "tell me about",
+                "summary", "whats this", "what's this", "what is this form"
+            ]) and ("form" in msg_lower or mentions_doc) and not is_field_explain and not is_common_mistakes and not is_missing_check and not is_mistake_check
+            wants_deep_check = any(kw in msg_lower for kw in ["deep", "detailed", "thorough", "full review", "full check"])
 
-            if is_missing_check and current_data is not None:
-                from agents.assistant_agent import build_missing_fields_prompt
-                prompt = build_missing_fields_prompt(doc_type, current_data, schema)
-                if prompt is None:
-                    # No missing required fields — craft a simple response
-                    reply = "All required fields are filled. You're good to go!"
-                    if not stream:
-                        return jsonify({"reply": reply, "action": None, "session": None, "message": None})
-                    def generate_empty():
-                        yield f"data: {json.dumps({'token': reply})}\n\n"
-                        yield f"data: {json.dumps({'done': True, 'reply': reply, 'action': None})}\n\n"
-                    return Response(generate_empty(), mimetype="text/event-stream",
-                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"})
-            elif is_mistake_check and current_data:
-                from agents.assistant_agent import build_mistake_check_prompt
-                prompt = build_mistake_check_prompt(doc_type, current_data, schema)
-            elif is_field_explain:
-                from agents.assistant_agent import build_field_explain_prompt
-                prompt = build_field_explain_prompt(doc_type, user_msg, schema)
-            else:
-                # Generic local query — use existing assistant prompt with empty history
-                from agents.assistant_agent import build_assistant_prompt
-                prompt = build_assistant_prompt(user_msg, doc_type, schema, current_data or {}, [])
+            # ── INTENT: Missing Fields ──
+            if is_missing_check:
+                filled = _build_filled_context(data_context)
+                # Collect required field labels from schema
+                required_labels: list[str] = []
+                for _, field in _iter_visible_fields(schema, data_context, doc_type):
+                    if field.get("required") and not _is_value_filled(data_context.get(field.get("key", ""))):
+                        required_labels.append(field.get("label") or field.get("key", ""))
+                if not required_labels:
+                    return _reply_local("✅ All required fields are filled. You can review optional fields or generate the confirmation.")
 
-            # ── SSE Streaming path ──
-            if stream:
-                def generate():
-                    full_text = ""
-                    try:
-                        for chunk in call_gemini_stream(prompt, model_name="gemini-flash-latest"):
-                            full_text += chunk
-                            yield f"data: {json.dumps({'token': chunk})}\n\n"
-                        # Send final message with cleaned full text + action extraction
-                        clean_text, action = _extract_chat_action(full_text, user_msg)
-                        yield f"data: {json.dumps({'done': True, 'reply': clean_text, 'action': action})}\n\n"
-                    except Exception as e:
-                        yield f"data: {json.dumps({'error': str(e)[:200]})}\n\n"
-
-                return Response(
-                    generate(),
-                    mimetype="text/event-stream",
-                    headers={
-                        "Cache-Control": "no-cache",
-                        "X-Accel-Buffering": "no",
-                        "Connection": "keep-alive",
-                    }
+                prompt = (
+                    f"DOCUMENT: {doc_display}\n"
+                    f"FILLED FIELDS: {json.dumps(filled, default=str)}\n"
+                    f"REQUIRED FIELDS STILL EMPTY: {', '.join(required_labels[:20])}\n"
+                    f"User asks: \"{user_msg}\"\n"
+                    f"Reply in 2-4 plain text sentences — no markdown, no bullet lists, no bold, no headings. "
+                    f"Group remaining fields by section inline, like: \"In Party Information: Counterparty Name and Execution Date. In Trade Details: Notional Amount.\" "
+                    f"If only 1-2 fields remain, make it encouraging: \"Almost done! Just fill in...\" 70 words max. Do NOT mention filled fields."
                 )
+                if stream:
+                    return _groq_stream_response(prompt, max_tokens=180)
+                reply = call_groq(prompt, max_tokens=180)
+                reply, _ = _extract_chat_action(reply, user_msg)
+                return _reply_local(reply)
 
-            # ── Non-streaming path (fallback) ──
-            reply = call_gemini(prompt, model_name="gemini-flash-latest")
-            reply, _ = _extract_chat_action(reply, user_msg)
+            # ── INTENT: Mistake Check ("Am I correct?") ──
+            if is_mistake_check:
+                filled = _build_filled_context(data_context)
+                if not filled:
+                    return _reply_local("You haven't filled any fields yet. Start filling in the form and I'll review your entries.")
 
-            return jsonify({
-                "reply": reply,
-                "action": None,
-                "session": None,
-                "message": None,
-            })
+                prompt = (
+                    f"DOCUMENT: {doc_display}\n"
+                    f"FILLED FIELDS: {json.dumps(filled, default=str)}\n"
+                    f"User asks: \"{user_msg}\"\n"
+                    f"Review ONLY the filled fields above. Point out: wrong dates, nonsense values, "
+                    f"inconsistent entries, type mismatches. Be specific — mention field names. "
+                    f"Reply in 2-4 plain text sentences — no markdown, no bullet lists, no bold, no headings. "
+                    f"If no issues, end with: \"No obvious issues found — everything looks good.\" Max 150 words."
+                )
+                if stream:
+                    return _groq_stream_response(prompt, max_tokens=280)
+                reply = call_groq(prompt, max_tokens=280)
+                reply, action = _extract_chat_action(reply, user_msg)
+                return _reply_local(reply, action)
 
-        # ── Global Scope (ChatCopilot — existing flow with DB) ──
-        db = get_db()
-        session = _chat_session_for_user(db, body.get("session_id"))
-        if not session:
-            session = _create_chat_session(db, user_msg)
+            # ── INTENT: Field Explain ──
+            if is_field_explain and active_field_key:
+                resolved_field = _find_field_in_schema(schema, active_field_key)
+                field_label = active_field_label or (resolved_field.get("label") if resolved_field else active_field_key)
+                field_type = resolved_field.get("type", "text") if resolved_field else "text"
+                options = resolved_field.get("options", []) if resolved_field else []
 
-        history = _load_chat_history(db, session["_id"])
+                prompt = (
+                    f"DOCUMENT: {doc_display}\n"
+                    f"FIELD: {field_label} (key: {active_field_key}) — type: {field_type}"
+                    + (f", options: {json.dumps(options)[:200]}" if options else "")
+                    + f"\nUser asks: \"{user_msg}\"\n"
+                    f"Reply in 2-3 plain text sentences — no markdown, no bullet lists, no bold, no headings. "
+                    f"Include: meaning, a short example, and a practical tip. "
+                    f"If select field, ALWAYS identify and recommend the best matching option from the list. Never say you're not aware — pick the closest one. Under 70 words."
+                )
+                if stream:
+                    return _groq_stream_response(prompt, max_tokens=120)
+                reply = call_groq(prompt, max_tokens=120)
+                reply, _ = _extract_chat_action(reply, user_msg)
+                return _reply_local(reply)
 
+            # ── INTENT: Common Mistakes ──
+            if is_common_mistakes:
+                prompt = (
+                    f"DOCUMENT: {doc_display}\n"
+                    f"User asks: \"{user_msg}\"\n"
+                    f"Reply in 3-4 plain text sentences — no markdown, no bullet lists, no bold, no headings. "
+                    f"Each mistake as its own short sentence. Be specific with examples. Under 80 words."
+                )
+                if stream:
+                    return _groq_stream_response(prompt, max_tokens=200)
+                reply = call_groq(prompt, max_tokens=200)
+                reply, _ = _extract_chat_action(reply, user_msg)
+                return _reply_local(reply)
+
+            # ── INTENT: Form Overview ──
+            if is_form_overview:
+                prompt = (
+                    f"DOCUMENT: {doc_display}\n"
+                    f"User asks: \"{user_msg}\"\n"
+                    f"Reply in 2-4 plain text sentences — no markdown, no bullet lists, no bold, no headings. "
+                    f"Explain what this document is, where it's used, and 1-2 examples. Under 70 words."
+                )
+                if stream:
+                    return _groq_stream_response(prompt, max_tokens=150)
+                reply = call_groq(prompt, max_tokens=150)
+                reply, _ = _extract_chat_action(reply, user_msg)
+                return _reply_local(reply)
+
+            # ── Generic / Casual Chat ──
+            from agents.assistant_agent import build_casual_chat_prompt
+            prompt = build_casual_chat_prompt(doc_type, user_msg)
+
+            if stream:
+                return _groq_stream_response(prompt, max_tokens=250)
+
+            reply = call_groq(prompt, max_tokens=250)
+            reply, action = _extract_chat_action(reply, user_msg)
+            return _reply_local(reply, action)
+
+        # ── Global Scope (ChatCopilot — stateless, no DB, no session, no history) ──
         # 1. Fast-Track Navigation (Skip LLM for simple "go to" commands)
         fast_action = _detect_fast_navigation(user_msg)
         if fast_action and not re.search(r"\?", user_msg):
-            reply = f"Sure, opening {fast_action.replace('-', ' ')} for you."
-            action = fast_action
-            assistant_message = _save_chat_message(db, session["_id"], "assistant", reply, action)
+            reply = _nav_reply(fast_action)
             return jsonify({
                 "reply": reply,
-                "action": action,
-                "session": _serialise_chat_session(session),
-                "message": _serialise_chat_message(assistant_message),
+                "action": fast_action,
             })
 
-        # 2. Regular AI Response
-        if doc_type and schema and current_data is not None:
-            from agents.assistant_agent import build_assistant_prompt
-            prompt = build_assistant_prompt(user_msg, doc_type, schema, current_data, history)
-        else:
-            prompt = _build_chat_prompt(user_msg, history)
+        # 2. Regular AI Response — single message, no history context
+        prompt = _build_chat_prompt(user_msg)
 
-        _save_chat_message(db, session["_id"], "user", user_msg)
-
-        reply = call_gemini(prompt, model_name="gemini-flash-latest")
+        reply = call_groq(prompt, max_tokens=500)
         reply, action = _extract_chat_action(reply, user_msg)
-        assistant_message = _save_chat_message(db, session["_id"], "assistant", reply, action)
-        session = db.chat_sessions.find_one({"_id": session["_id"], "user_id": g.current_user_id})
 
         if action:
             print(f"  🚀 Navigation detected: {action}")
 
-        session_data = _serialise_chat_session(session) if session else None
-        
         return jsonify({
             "reply": reply,
             "action": action,
-            "session": session_data,
-            "message": _serialise_chat_message(assistant_message),
         })
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

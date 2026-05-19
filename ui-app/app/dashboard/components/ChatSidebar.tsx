@@ -34,6 +34,39 @@ export interface ChatSidebarProps {
   skippedCount: number;
 }
 
+// ── Speech Recognition Types ────────────────────
+interface SpeechRecognitionResultItem {
+  transcript: string;
+}
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  0: SpeechRecognitionResultItem;
+}
+interface SpeechRecognitionEvent {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: SpeechRecognitionResult;
+  };
+}
+interface SpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+interface SpeechWindow extends Window {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+}
+
 // ── Helpers ─────────────────────────────────────
 
 function getDocTypeLabel(dt: string): string {
@@ -176,12 +209,14 @@ export default function ChatSidebar({
   const [isStreaming, setIsStreaming] = useState(false);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [isListening, setIsListening] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevDataRef = useRef<Record<string, unknown>>({});
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   // ── Markdown stripper ────────────────────────────
-  const stripMarkdown = useCallback((text: string): string => {
-    return text
+  const stripMarkdown = useCallback((text: string, trim = true): string => {
+    let cleaned = text
       .replace(/\*\*(.*?)\*\*/g, '$1')
       .replace(/\*(.*?)\*/g, '$1')
       .replace(/__(.*?)__/g, '$1')
@@ -193,8 +228,8 @@ export default function ChatSidebar({
       .replace(/^\d+\.\s+/gm, '')
       .replace(/^>\s+/gm, '')
       .replace(/~~(.*?)~~/g, '$1')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+      .replace(/\n{3,}/g, '\n\n');
+    return trim ? cleaned.trim() : cleaned;
   }, []);
 
   // ── Auto-scroll to bottom ────────────────────────
@@ -288,6 +323,7 @@ export default function ChatSidebar({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
             ...authHeaders(),
           },
           body: JSON.stringify({
@@ -297,6 +333,8 @@ export default function ChatSidebar({
             doc_type: docType || undefined,
             schema: schema || undefined,
             current_data: currentData || undefined,
+            active_field_key: activeFieldKey || undefined,
+            active_field_label: activeFieldLabel || undefined,
           }),
         });
 
@@ -311,46 +349,70 @@ export default function ChatSidebar({
 
         const decoder = new TextDecoder();
         let fullText = '';
+        let buffer = '';
+        let doneReceived = false;
+
+        const handleEvent = (payload: { token?: string; done?: boolean; reply?: string; error?: string }) => {
+          if (payload.token) {
+            setIsLoading(false);
+            fullText += payload.token;
+            setStreamingText(stripMarkdown(fullText, false));
+          }
+          if (payload.done) {
+            const finalText = stripMarkdown(payload.reply || fullText, true);
+            setIsLoading(false);
+            setIsStreaming(false);
+            setStreamingText('');
+            setMessages(prev => [...prev, { role: 'assistant', content: finalText }]);
+            doneReceived = true;
+          }
+          if (payload.error) {
+            setIsLoading(false);
+            setIsStreaming(false);
+            setStreamingText('');
+            setMessages(prev => [
+              ...prev,
+              { role: 'assistant', content: `Error: ${payload.error}` },
+            ]);
+            doneReceived = true;
+          }
+        };
+
+        const flushBuffer = (chunkText: string) => {
+          buffer += chunkText;
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const event of events) {
+            const lines = event.split('\n');
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const data = JSON.parse(line.slice(6));
+                handleEvent(data);
+              } catch {
+                // Skip invalid JSON lines
+              }
+            }
+          }
+        };
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
+          flushBuffer(decoder.decode(value, { stream: true }));
+        }
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
+        if (buffer.trim().length > 0) {
+          flushBuffer('\n\n');
+        }
 
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.token) {
-                setIsLoading(false);
-                fullText += data.token;
-                setStreamingText(stripMarkdown(fullText));
-              }
-              if (data.done) {
-                const finalText = stripMarkdown(data.reply || fullText);
-                setIsLoading(false);
-                setIsStreaming(false);
-                setStreamingText('');
-                setMessages(prev => [
-                  ...prev,
-                  { role: 'assistant', content: finalText },
-                ]);
-              }
-              if (data.error) {
-                setIsLoading(false);
-                setIsStreaming(false);
-                setStreamingText('');
-                setMessages(prev => [
-                  ...prev,
-                  { role: 'assistant', content: `Error: ${data.error}` },
-                ]);
-              }
-            } catch {
-              // Skip invalid JSON lines
-            }
-          }
+        if (!doneReceived && fullText.trim()) {
+          const finalText = stripMarkdown(fullText, true);
+          setIsLoading(false);
+          setIsStreaming(false);
+          setStreamingText('');
+          setMessages(prev => [...prev, { role: 'assistant', content: finalText }]);
         }
       } catch (error) {
         console.error('ChatSidebar request failed', error);
@@ -366,18 +428,29 @@ export default function ChatSidebar({
         ]);
       }
     },
-    [isLoading, isStreaming, docType, schema, currentData, stripMarkdown],
+    [isLoading, isStreaming, docType, schema, currentData, stripMarkdown, activeFieldKey, activeFieldLabel],
   );
 
+  // ── Stop mic helper ────────────────────────────
+  const stopMic = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+      setIsListening(false);
+    }
+  }, []);
+
   const handleSend = useCallback(() => {
+    stopMic(); // auto-stop mic when sending
     sendMessage(input.trim());
-  }, [input, sendMessage]);
+  }, [input, sendMessage, stopMic]);
 
   const handleChipClick = useCallback(
     (chip: string) => {
+      stopMic(); // auto-stop mic when clicking a chip
       sendMessage(chip);
     },
-    [sendMessage],
+    [sendMessage, stopMic],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -386,6 +459,74 @@ export default function ChatSidebar({
       handleSend();
     }
   };
+
+  // ── Voice / Mic toggle ─────────────────────────
+  const toggleListening = useCallback(() => {
+    const SpeechRecognitionAPI =
+      (window as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition ||
+      (window as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      alert('Speech recognition is not supported in your browser.');
+      return;
+    }
+
+    // ── Manually turning OFF ──
+    if (isListening) {
+      const rec = recognitionRef.current;
+      recognitionRef.current = null; // null first so onend won't restart
+      rec?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    // ── Turning ON ──
+    const recognition = new (SpeechRecognitionAPI as SpeechRecognitionConstructor)();
+    recognition.lang = 'en-US';
+    recognition.interimResults = true;  // capture partial speech in real time
+    recognition.maxAlternatives = 1;
+    recognition.continuous = true;      // keep listening until manual stop
+
+    const startInput = input;           // snapshot input at the moment mic was clicked
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      // Accumulate all final transcripts spoken in this session
+      let sessionFinal = '';
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          sessionFinal += event.results[i][0].transcript;
+        }
+      }
+      // Collect any current interim (partial) transcript
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (!event.results[i].isFinal) {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      // Rebuild from scratch — prevents progressive duplication
+      setInput(startInput + (startInput ? ' ' : '') + sessionFinal + interimTranscript);
+    };
+
+    recognition.onerror = () => {
+      // Don't auto-stop — restart if user hasn't toggled OFF yet
+      if (recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch { /* ignore */ }
+      }
+    };
+
+    recognition.onend = () => {
+      // continuous=true — onend fires only on manual stop or browser timeout.
+      // Try to restart if user still wants to listen.
+      if (recognitionRef.current) {
+        try { recognitionRef.current.start(); } catch { /* ignore */ }
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsListening(true);
+  }, [isListening]);
 
   // ── Contextual help for active field ──────────────
   const activeField = activeFieldKey ? findFieldInSchema(schema, activeFieldKey) : null;
@@ -411,9 +552,12 @@ export default function ChatSidebar({
     >
       {/* ── Header ──────────────────────────────── */}
       <div className="shrink-0 px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-        <h3 className="text-[15px] font-bold text-slate-800 tracking-tight">
-          📋 Form Assistant
-        </h3>
+        <div className="flex items-center gap-2.5">
+          <img src="/logo.svg" alt="" className="w-6 h-6 opacity-80" />
+          <h3 className="text-[15px] font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            TradeDocAI's Copilot
+          </h3>
+        </div>
         {messages.length > 0 && (
           <button
             onClick={handleClearChat}
@@ -427,9 +571,9 @@ export default function ChatSidebar({
 
       {/* ── Active Field Indicator ──────────────── */}
       {activeFieldKey ? (
-        <div className="shrink-0 px-5 py-2.5 bg-indigo-50/50 border-b border-indigo-100">
-          <p className="text-[12px] font-semibold text-indigo-600 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+        <div className="shrink-0 px-5 py-2.5 bg-emerald-50/50 border-b border-emerald-100">
+          <p className="text-[12px] font-semibold text-emerald-600 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Active: {activeFieldLabel}
           </p>
         </div>
@@ -445,8 +589,19 @@ export default function ChatSidebar({
       {/* ── Messages Area ───────────────────────── */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-3 space-y-3"
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative"
       >
+        {/* ── Logo watermark (behind chats) ────── */}
+        {messages.length === 0 && !isStreaming && !isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+            <img
+              src="/logo.svg"
+              alt="TradeDoc AI"
+              className="w-56 h-56 opacity-[0.05] select-none"
+              draggable={false}
+            />
+          </div>
+        )}
         {/* ── Empty state: Quick Tips or Contextual Help ─ */}
         {messages.length === 0 && !isStreaming && !isLoading && (
           <>
@@ -580,12 +735,22 @@ export default function ChatSidebar({
         )}
       </div>
 
+      {/* ── Progress bar ────────────────────────── */}
+      <div className="shrink-0 px-4 pt-2 pb-0.5">
+        <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
       {/* ── Suggestion Chips ────────────────────── */}
       {(() => {
         const chips = getSuggestionChips();
         if (chips.length === 0) return null;
         return (
-          <div className="shrink-0 px-4 pt-1 pb-1 border-t border-slate-100">
+          <div className="shrink-0 px-4 pt-2 pb-1.5">
             <div className="flex flex-wrap gap-1.5">
               {chips.map((chip, i) => (
                 <button
@@ -602,31 +767,73 @@ export default function ChatSidebar({
         );
       })()}
 
-      {/* ── Progress bar ────────────────────────── */}
-      <div className="shrink-0 px-4 py-0.5 border-t border-slate-100">
-        <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-indigo-500 rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
+      {/* ── Tagline ──────────────────────────────── */}
+      <p className="shrink-0 px-4 pb-1 text-[11px] text-center text-slate-300 font-medium tracking-wide">
+        Your intelligent form assistant, always at your fingertips
+      </p>
 
       {/* ── Text Input ──────────────────────────── */}
-      <div className="shrink-0 px-4 py-2 border-t border-slate-100">
+      <div className="shrink-0 px-4 pt-1 pb-3">
         <div className="flex gap-2">
+          {/* Mic button */}
+          <button
+            onClick={toggleListening}
+            disabled={isLoading || isStreaming}
+            className={`w-10 h-10 shrink-0 flex items-center justify-center rounded-xl transition-all active:scale-95 group ${
+              isListening
+                ? 'bg-red-500 text-white animate-pulse shadow-lg shadow-red-200'
+                : 'bg-red-50 text-red-500 hover:bg-red-100 border border-red-200'
+            }`}
+            title={isListening ? 'Click to stop listening' : 'Click to start voice input'}
+          >
+            {isListening ? (
+              /* Stop icon (cross) — click to turn off */
+              <svg
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2.5"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            ) : (
+              /* Mic icon — click to turn on */
+              <svg
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                />
+              </svg>
+            )}
+          </button>
+          {/* Text input */}
           <input
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder='Type "check my entries" or ask…'
-            className="flex-1 min-w-0 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[13px] text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
+            className="flex-1 min-w-0 px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-[13px] text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all"
           />
+          {/* Send button */}
           <button
             onClick={handleSend}
             disabled={!input.trim() || isLoading}
-            className="w-10 h-10 shrink-0 flex items-center justify-center bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+            className="w-10 h-10 shrink-0 flex items-center justify-center bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 shadow-sm"
           >
             <svg
               width="16"
