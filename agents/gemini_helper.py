@@ -153,7 +153,7 @@ def call_gemini_with_pdf(prompt: str, pdf_path: str, max_retries: int = 3, model
     if use_vertex and primary_model == "gemini-flash-latest":
         primary_model = "gemini-3.5-flash"
         
-    fallback_default = "gemini-3.5-flash" if use_vertex else "gemini-flash-latest"
+    fallback_default = "gemini-2.5-flash" if use_vertex else "gemini-flash-latest"
     fallback_model = fallback_default if ("2.0" in primary_model or "2.5" in primary_model or "3.0" in primary_model or "3.1" in primary_model or "3.5" in primary_model or "pro" in primary_model) else None
     
     with open(pdf_path, "rb") as f:
