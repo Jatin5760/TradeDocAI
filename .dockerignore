@@ -80,3 +80,4 @@ ui/
 # ── Gemini AI tool data ─────────────────────────────────────
 .gemini/
 .dockerimage
+
