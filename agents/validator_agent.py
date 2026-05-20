@@ -29,6 +29,10 @@ IGNORE (do NOT flag as missing) — these are email-only metadata, not confirmat
 - Email addresses, phone numbers, CC fields — email metadata only
 - Contact details / notice details that are only mentioned in the email signature block
 
+CRITICAL UNICODE/CHARACTER RULES:
+- Never use non-Latin characters (such as Greek capital Alpha 'Α' [U+0391] or Cyrillic characters) when writing or comparing English names (like "ABN AMRO"). Always use standard Latin characters (A-Z) in your response.
+- Do not report false mismatches due to minor unicode/character encoding discrepancies. Visually identical characters (homoglyphs) should be treated as matching.
+
 ONLY validate these categories of fields:
 - **Trade Economics**: dates (trade date, effective date, termination date, settlement date, valuation date), notional amounts, rates (fixed rate, floating rate, forward rate, spread), currencies, payment amounts
 - **Party Identification**: party legal names, offices (if in PDF), addresses (if in PDF)

@@ -30,3 +30,9 @@ pdfservices-sdk>=4.2.0
 # ── MongoDB ───────────────────────────────
 pymongo>=4.0
 certifi>=2024.0.0
+
+# ── PDF Signature Stamping ────────────────
+pypdf>=5.0.0
+reportlab>=4.1.0
+pillow>=10.3.0
+

@@ -26,6 +26,7 @@ import DocumentTypeBreakdown from './components/DocumentTypeBreakdown';
 import ExtractionEfficiencyChart from './components/ExtractionEfficiencyChart';
 import SettingsUI from './components/SettingsUI';
 import MyDocumentsUI from './components/MyDocumentsUI';
+import WorkflowBuilderPanel from './components/WorkflowBuilderPanel';
 import dynamic from 'next/dynamic';
 
 const CustomPDFViewer = dynamic(() => import('./components/CustomPDFViewer'), { 
@@ -43,7 +44,7 @@ const CustomPDFViewer = dynamic(() => import('./components/CustomPDFViewer'), {
 // ── API Base ──────────────────────────────────
 const API = API_BASE;
 
-const validPages: AppPage[] = ['landing', 'analytics', 'ai', 'form', 'pdf', 'settings', 'my-documents'];
+const validPages: AppPage[] = ['landing', 'analytics', 'ai', 'form', 'pdf', 'settings', 'my-documents', 'workflow-builder'];
 
 function getInitialPage(): AppPage {
   return 'landing';
@@ -245,7 +246,7 @@ export default function DashboardPage() {
 
   const handleBack = useCallback(() => {
     // If we came to form/pdf from my-documents, go back to my-documents
-    if (page === 'form' && previousPageRef.current === 'my-documents') {
+    if ((page === 'form' || page === 'pdf') && previousPageRef.current === 'my-documents') {
       setPage('my-documents');
       setActiveSchema(null);
       setCurrentStep(0);
@@ -255,12 +256,8 @@ export default function DashboardPage() {
       setAiEmailText('');
       setEditingDocId(null);
       setModal('none');
-    } else if (page === 'form' || page === 'pdf') {
-      // From any other source, go home
-      goHome();
-    } else if (page === 'ai') {
-      goHome();
     } else {
+      // From any other source, go home
       goHome();
     }
   }, [page, goHome]);
@@ -590,6 +587,12 @@ export default function DashboardPage() {
 
   // View a finalized document's stored PDF
   const viewPdfFromDoc = useCallback(async (doc: RecentDoc) => {
+    // Track source page before navigating to PDF so back button returns correctly
+    if (currentPageRef.current === 'my-documents') {
+      previousPageRef.current = 'my-documents';
+    } else {
+      previousPageRef.current = null; // coming from dashboard/landing → back goes home
+    }
     showLoading('Opening PDF...', 'Loading document');
     try {
       const r = await fetch(`${API}/api/documents/${doc._id}/pdf`, { headers: authHeaders() });
@@ -1002,7 +1005,7 @@ export default function DashboardPage() {
         onSetPage={(nextPage) => { setPage(nextPage); setSidebarOpen(false); }}
         isMobileOpen={sidebarOpen}
         onCloseMobile={() => setSidebarOpen(false)}
-        hidden={isManualForm}
+        hidden={isManualForm || page === 'workflow-builder'}
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative">
@@ -1065,7 +1068,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto scroll-smooth px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+        <div className={page === 'workflow-builder' ? "flex-1 overflow-hidden flex flex-col" : "flex-1 overflow-y-auto scroll-smooth px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8"}>
           {backendDown && (
             <div className="max-w-4xl mx-auto mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 flex items-center gap-4 text-red-700 animate-pulse">
               <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
@@ -1209,6 +1212,19 @@ export default function DashboardPage() {
 
 
           {page === 'ai' && <AIExtractPanel text={aiEmailText} onChange={setAiEmailText} onExtract={submitAIExtract} onCancel={goHome} />}
+
+          {page === 'workflow-builder' && (
+            <WorkflowBuilderPanel
+              recentDocs={recentDocs}
+              onShowToast={showToast}
+              apiBase={API}
+              onClose={goHome}
+              authHeaders={(extra = {}) => ({
+                ...authHeaders(),
+                ...extra,
+              })}
+            />
+          )}
 
           {page === 'form' && (
             <div className="max-w-2xl mx-auto">
@@ -1360,9 +1376,10 @@ export default function DashboardPage() {
 
           {page === 'pdf' && (
             <CustomPDFViewer
+              docId={editingDocId || ''}
               pdfUrl={currentPdfBlobUrl!}
               filename={currentPdfFilename}
-              onClose={goHome}
+              onClose={handleBack}
               onDownload={() => { const a = document.createElement('a'); a.href = currentPdfBlobUrl!; a.download = currentPdfFilename; a.click(); }}
               onPrint={() => { const w = window.open(currentPdfBlobUrl!, '_blank'); w?.print(); }}
               isAiCreated={aiMode}
@@ -1372,6 +1389,8 @@ export default function DashboardPage() {
               onViewCurrentReport={() => setValidationPanelOpen(true)}
               onConvertToWord={downloadWord}
               generatingValidation={loading}
+              onSigned={fetchRecentDocs}
+              initialIsSigned={recentDocs.find(d => d._id === editingDocId)?.signed || false}
             />
           )}
         </div>

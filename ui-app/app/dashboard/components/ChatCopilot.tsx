@@ -69,6 +69,53 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
   const [isVoiceMessage, setIsVoiceMessage] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dragContainerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
+
+  // Smart panel positioning — opens near the icon, never off-screen
+  useEffect(() => {
+    if (!isOpen || !buttonRef.current) return;
+
+    const btn = buttonRef.current.getBoundingClientRect();
+    const gap = 16;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Use responsive panel dimensions matching the CSS classes
+    const isMobile = vw < 640;
+    const panelW = isMobile ? Math.min(vw * 0.92, 500) : 400;
+    const panelH = isMobile ? vh * 0.75 : 600;
+
+    let top: number;
+    let left: number;
+
+    // Vertical: prefer opening above the button
+    if (btn.top >= panelH + gap) {
+      top = btn.top - panelH - gap;
+    } else if (vh - btn.bottom >= panelH + gap) {
+      top = btn.bottom + gap;
+    } else {
+      // Not enough space either way — center vertically with a safety margin
+      top = Math.max(8, (vh - panelH) / 2);
+    }
+
+    // Horizontal: prefer right-aligned with the button
+    if (vw - btn.right >= panelW) {
+      left = btn.right;
+    } else if (btn.left >= panelW) {
+      left = btn.left - panelW;
+    } else {
+      // Center horizontally with a safety margin
+      left = Math.max(8, (vw - panelW) / 2);
+    }
+
+    setPanelStyle({
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${left}px`,
+    });
+  }, [isOpen]);
 
   // ── Custom Markdown Components ──────────────────
   const markdownComponents: Partial<Components> = {
@@ -251,13 +298,8 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
       }
 
       const reply = data.reply || 'Sorry, I encountered an error.';
-      const action = data.action;
 
-      setMessages(prev => [...prev, { role: 'assistant', content: reply, action }]);
-      
-      if (action && onNavigate) {
-        onNavigate(action);
-      }
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
 
       if (wasVoice) {
         speak(reply);
@@ -272,13 +314,22 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
 
   return (
     <>
-      {/* Floating Draggable Wrapper */}
-      <motion.div
-        drag
-        dragMomentum={false}
-        className="relative z-[100]"
+      {/* Outer container fills the viewport to provide drag boundaries */}
+      <div
+        ref={dragContainerRef}
+        className="fixed inset-0 pointer-events-none z-[100]"
+        style={{ touchAction: 'none' }}
       >
+        {/* Floating Draggable Wrapper */}
+        <motion.div
+          drag
+          dragMomentum={false}
+          dragConstraints={dragContainerRef}
+          whileDrag={{ scale: 1.05 }}
+          className="absolute bottom-6 right-6 sm:bottom-8 sm:right-8 pointer-events-auto"
+        >
         <button
+          ref={buttonRef}
           onClick={() => setIsOpen(!isOpen)}
           className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl drop-shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 bg-transparent"
         >
@@ -301,15 +352,17 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
             <span className="absolute top-0 right-0 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" />
           )}
         </button>
+        </motion.div>
 
-        {/* Chat Window - Nested inside draggable div so it moves with it */}
+        {/* Chat Window — detached from draggable icon so it always opens fully visible */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: -20, scale: 1 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
-              className="absolute bottom-full right-0 mb-4 w-[92vw] sm:w-[400px] h-[75vh] sm:h-[600px] max-w-[500px] bg-white rounded-[24px] sm:rounded-[32px] shadow-[0_30px_80px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden border border-gray-100"
+              style={Object.keys(panelStyle).length > 0 ? panelStyle : { position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+              className="w-[92vw] sm:w-[400px] h-[75vh] sm:h-[600px] max-w-[500px] bg-white rounded-[24px] sm:rounded-[32px] shadow-[0_30px_80px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden border border-gray-100 pointer-events-auto"
             >
               {/* Header */}
               <div className="p-4 sm:p-6 bg-gray-50/50 border-b border-gray-100 flex items-center gap-2 sm:gap-3">
@@ -457,7 +510,7 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
           </motion.div>
         )}
       </AnimatePresence>
-      </motion.div>
+      </div>
     </>
   );
 }

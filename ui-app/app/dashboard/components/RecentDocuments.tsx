@@ -247,27 +247,21 @@ export default function RecentDocuments({ documents, onLoad, onView, onCreateNew
                       <span
                         className="w-1.5 h-1.5 rounded-full"
                         style={{
-                          background: doc.is_draft
+                          background: doc.is_draft || doc.validation_status === 'pending'
                             ? '#f59e0b'
-                            : doc.validation_status === 'pending'
-                            ? '#8b5cf6'
                             : '#10b981'
                         }}
                       />
                       <span
                         className="text-[12px] font-bold"
                         style={{
-                          color: doc.is_draft
+                          color: doc.is_draft || doc.validation_status === 'pending'
                             ? '#f59e0b'
-                            : doc.validation_status === 'pending'
-                            ? '#8b5cf6'
                             : '#10b981'
                         }}
                       >
-                        {doc.is_draft
+                        {doc.is_draft || doc.validation_status === 'pending'
                           ? 'In Progress'
-                          : doc.validation_status === 'pending'
-                          ? 'Pending Validation'
                           : 'Verified'}
                       </span>
                     </div>

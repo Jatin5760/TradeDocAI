@@ -324,27 +324,10 @@ def require_auth(fn):
 def _build_chat_prompt(user_msg: str) -> str:
     """Build prompt for global ChatCopilot — stateless, no history."""
     current_time = datetime.now(timezone.utc).strftime("%B %d, %Y")
-    prompt = f"You are TradeDoc Copilot, a helpful and intelligent AI assistant. Today's date is {current_time}. "
-    prompt += "While you specialize in TradeDoc AI (derivatives like IRS, CDS, FX NDF, Equity TRS), you are happy to help with general questions too. "
-    prompt += "Be conversational, friendly, and smart. Keep responses concise — 30-60 words, never exceed 90 words. "
-    prompt += "Use clean markdown formatting (**bold** for emphasis, bullet lists where helpful) to make replies beautiful. "
-    prompt += "CRITICAL NAVIGATION RULES:\n"
-    prompt += "1. If the user mentions 'manual', 'form', 'create', or 'entry', YOU MUST use the 'form-' tokens (e.g., [NAVIGATE:form-irs]).\n"
-    prompt += "2. If the user mentions 'extract', 'upload', 'file', or 'AI extraction', use the 'ai' token (e.g., [NAVIGATE:ai]).\n"
-    prompt += "3. For navigation requests, use the token AND a short friendly reply like 'Sure, let's go to Settings!' or 'Taking you to Analytics!'\n\n"
-    prompt += "Possible page names and their meanings:\n"
-    prompt += "- landing: Home, Dashboard, Overview\n"
-    prompt += "- analytics: Charts, Performance, Analytics, Stats\n"
-    prompt += "- ai: AI Extraction, Upload Trade, Document Extraction\n"
-    prompt += "- settings-profile: Profile, User Settings\n"
-    prompt += "- settings-preference: Preferences, Model selection\n"
-    prompt += "- settings-password: Password, Security\n"
-    prompt += "- my-documents: My Documents, History, Saved Trades\n"
-    prompt += "- form-fx_ndf: Manual FX NDF form, Create FX trade\n"
-    prompt += "- form-irs: Manual Interest Rate Swap form, Create IRS trade\n"
-    prompt += "- form-cds: Manual Credit Default Swap form, Create CDS trade\n"
-    prompt += "- form-equity_trs: Manual Equity TRS form, Create TRS trade\n"
-    prompt += "Example: [NAVIGATE:form-irs]\n\n"
+    prompt = f"You are TradeDoc Copilot, a friendly and knowledgeable AI assistant built into the TradeDoc AI platform. Today's date is {current_time}. "
+    prompt += "You specialize in trade confirmation documents for financial derivatives — IRS, CDS, FX NDF, Equity TRS — but you're also happy to help with general questions. "
+    prompt += "Be warm, conversational, and genuinely helpful. Provide rich, detailed explanations with examples when relevant. "
+    prompt += "Use clean markdown formatting (**bold** for key terms, bullet lists where helpful, ### headings for sections) to make replies beautiful and easy to read. "
     prompt += f"User: {user_msg}\nAssistant:"
     return prompt
 
@@ -484,75 +467,69 @@ def _extract_chat_action(reply: str, user_msg: str) -> tuple[str, str | None]:
         reply = re.sub(nav_pattern, "", reply, flags=re.IGNORECASE).strip()
 
     if not action:
-        keywords = {
-            "landing": "landing", "home": "landing", "dashboard": "landing",
-            "analytics": "analytics", "charts": "analytics", "stats": "analytics",
-            "ai": "ai", "extraction": "ai", "upload": "ai",
-            "settings": "settings-profile", "profile": "settings-profile", "user setting": "settings-profile",
-            "preference": "settings-preference", "model": "settings-preference",
-            "password": "settings-password", "security": "settings-password",
-            "documents": "my-documents", "history": "my-documents",
-            "fx ndf form": "form-fx_ndf", "irs form": "form-irs", "cds form": "form-cds",
-            "equity trs form": "form-equity_trs", "create fx": "form-fx_ndf",
-            "create irs": "form-irs", "create cds": "form-cds", "create trs": "form-equity_trs",
-        }
-        text_to_check = (reply + " " + user_msg).lower()
-        for kw, target in keywords.items():
-            if (kw.endswith("form") or kw.startswith("create")) and kw in text_to_check:
-                action = target
-                break
+        # Only extract nav from reply if the USER explicitly asked for navigation
+        nav_intent_phrases = [
+            "take me to", "go to", "navigate to", "show me", "open the",
+            "i want to go to", "bring me to", "switch to", "take me",
+            "create an", "create a", "fill the", "fill a", "start the",
+        ]
+        user_lower = user_msg.lower()
+        user_wants_nav = any(phrase in user_lower for phrase in nav_intent_phrases)
 
-        if not action:
+        if user_wants_nav:
+            keywords = {
+                "landing": "landing", "home": "landing", "dashboard": "landing",
+                "analytics": "analytics", "charts": "analytics", "stats": "analytics",
+                "ai": "ai", "extraction": "ai", "upload": "ai",
+                "settings": "settings-profile", "profile": "settings-profile",
+                "preference": "settings-preference", "model": "settings-preference",
+                "password": "settings-password", "security": "settings-password",
+                "documents": "my-documents", "history": "my-documents",
+                "fx ndf": "form-fx_ndf", "irs": "form-irs", "cds": "form-cds",
+                "equity trs": "form-equity_trs",
+            }
+            text_to_check = (reply + " " + user_msg).lower()
             for kw, target in keywords.items():
-                pattern = rf"(?:navigate|go|open|show|switch|take|to|towards)\s+(?:me\s+)?(?:to\s+)?{re.escape(kw)}"
-                if re.search(pattern, text_to_check):
+                if kw in text_to_check:
                     action = target
                     break
 
     if action:
-        nav_only_phrases = ["navigate", "go to", "show", "open", "take me to", "switch to"]
-        is_nav_only = any(user_msg.lower().startswith(p) for p in nav_only_phrases) or not reply.strip()
+        nav_only_phrases = ["take me to", "go to", "navigate to", "show me", "open", "switch to", "bring me to", "i want to go to", "create an", "create a", "fill the", "fill a", "start the"]
+        is_nav_only = any(p in user_msg.lower() for p in nav_only_phrases) or not reply.strip()
         if is_nav_only and not re.search(r"\?", user_msg):
             reply = _nav_reply(action)
 
     return reply, action
 
 def _detect_fast_navigation(user_msg: str) -> str | None:
-    """Detects simple navigation commands without calling AI to save time/cost."""
+    """Detects explicit navigation commands to save time/cost — only triggers on clear nav intent."""
     msg = user_msg.lower().strip()
     
-    # Common navigation keywords
+    # Must contain an explicit navigation phrase
+    nav_phrases = ["go to", "open", "show", "switch to", "take me to", "navigate to", "move to",
+                   "bring me to", "i want to go to", "create an", "create a", "fill the", "fill a",
+                   "start the"]
+    has_nav_intent = any(msg.startswith(p) or p in msg for p in nav_phrases)
+    
+    if not has_nav_intent:
+        return None
+    
+    # Navigation keywords — only form targets use the form- prefix
     keywords = {
         "landing": "landing", "home": "landing", "dashboard": "landing",
         "analytics": "analytics", "charts": "analytics", "stats": "analytics",
         "ai": "ai", "extraction": "ai", "upload": "ai",
         "settings": "settings-profile", "profile": "settings-profile",
         "documents": "my-documents", "history": "my-documents",
-        "fx ndf form": "form-fx_ndf", "irs form": "form-irs", "cds form": "form-cds",
-        "equity trs form": "form-equity_trs", "create fx": "form-fx_ndf",
-        "create irs": "form-irs", "create cds": "form-cds", "create trs": "form-equity_trs",
+        "fx ndf": "form-fx_ndf", "irs": "form-irs", "cds": "form-cds",
+        "equity trs": "form-equity_trs",
     }
     
-    # If message is very short and contains a keyword
     for kw, target in keywords.items():
-        if kw == msg: return target
-        
-    # Standard navigation patterns: "go to cds", "open analytics" etc.
-    prefixes = ["go to", "open", "show", "switch to", "take me to", "navigate to", "move to"]
-    for prefix in prefixes:
-        if msg.startswith(prefix):
-            remaining = msg[len(prefix):].strip()
-            for kw, target in keywords.items():
-                if kw in remaining:
-                    print(f"  ⚡ Fast Navigation Triggered: {target}")
-                    return target
-                    
-    # Also check if just the keyword is present in a short message
-    if len(msg.split()) <= 3:
-        for kw, target in keywords.items():
-            if kw in msg:
-                print(f"  ⚡ Fast Navigation Triggered (Keyword): {target}")
-                return target
+        if kw in msg:
+            print(f"  ⚡ Fast Navigation Triggered: {target}")
+            return target
                     
     return None
 
@@ -1131,27 +1108,12 @@ def api_chat():
             return _reply_local(reply, action)
 
         # ── Global Scope (ChatCopilot — stateless, no DB, no session, no history) ──
-        # 1. Fast-Track Navigation (Skip LLM for simple "go to" commands)
-        fast_action = _detect_fast_navigation(user_msg)
-        if fast_action and not re.search(r"\?", user_msg):
-            reply = _nav_reply(fast_action)
-            return jsonify({
-                "reply": reply,
-                "action": fast_action,
-            })
-
-        # 2. Regular AI Response — single message, no history context
         prompt = _build_chat_prompt(user_msg)
 
         reply = call_groq(prompt, max_tokens=_max_t(500))
-        reply, action = _extract_chat_action(reply, user_msg)
-
-        if action:
-            print(f"  🚀 Navigation detected: {action}")
 
         return jsonify({
             "reply": reply,
-            "action": action,
         })
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
@@ -1241,9 +1203,9 @@ def api_save_document():
         is_draft = bool(body.get("is_draft", True))
         pdf_file_id = str(body.get("pdf_file_id", "")).strip() or None
 
-        # If finalizing with a pdf_file_id, try to resolve & upload to GCS
+        # Try to resolve & upload to GCS (for both drafts and finals)
         gcs_object_path = None
-        if not is_draft and pdf_file_id and ":" in pdf_file_id:
+        if pdf_file_id and ":" in pdf_file_id:
             pdf_path, _ = _resolve_generated_pdf({"pdf_file_id": pdf_file_id})
             if pdf_path and os.path.exists(pdf_path):
                 gcs_object_path = _upload_to_gcs(pdf_path, g.current_user_id, doc_type)
@@ -1265,9 +1227,9 @@ def api_save_document():
         }
         if source_email:
             doc["source_email"] = source_email[:10000]
-        # Set validation_status: AI-filled docs need validation, manual docs are auto-verified
+        # Set validation_status: All final documents start as pending until they are signed
         if not is_draft:
-            doc["validation_status"] = "pending" if ai_created else "verified"
+            doc["validation_status"] = "pending"
         if pdf_file_id:
             doc["pdf_file_id"] = pdf_file_id
         if gcs_object_path:
@@ -1358,11 +1320,8 @@ def api_update_document(doc_id):
             draft_doc.update(update_fields)
             draft_doc["is_draft"] = False
             
-            # Set validation_status when finalizing
-            if draft_doc.get("ai_created", False):
-                draft_doc["validation_status"] = "pending"
-            else:
-                draft_doc["validation_status"] = "verified"
+            # Set validation_status when finalizing: all finalized docs start as pending until they are signed
+            draft_doc["validation_status"] = "pending"
             
             # Store source email for later validation
             if source_email and not draft_doc.get("source_email"):
@@ -1409,17 +1368,16 @@ def api_update_document(doc_id):
         current_coll = db.documents if is_in_final else db.drafts
         update_fields["is_draft"] = bool(new_is_draft) if new_is_draft is not None else (not is_in_final)  # type: ignore[assignment]
 
-        # If already finalized but missing GCS path, upload PDF to cloud storage
-        if is_in_final:
-            doc = db.documents.find_one({"_id": oid, "user_id": g.current_user_id})
-            if doc and not doc.get("gcs_object_path"):
-                pdf_id = body.get("pdf_file_id", "") or update_fields.get("pdf_file_id", "")
-                if pdf_id and ":" in pdf_id:
-                    pdf_path, _ = _resolve_generated_pdf({"pdf_file_id": pdf_id})
-                    if pdf_path and os.path.exists(pdf_path):
-                        gcs_path = _upload_to_gcs(pdf_path, g.current_user_id, doc.get("doc_type", ""))
-                        if gcs_path:
-                            update_fields["gcs_object_path"] = gcs_path
+        # If missing GCS path, upload PDF to cloud storage (for both drafts and documents)
+        doc = current_coll.find_one({"_id": oid, "user_id": g.current_user_id})
+        if doc and not doc.get("gcs_object_path"):
+            pdf_id = body.get("pdf_file_id", "") or update_fields.get("pdf_file_id", "")
+            if pdf_id and ":" in pdf_id:
+                pdf_path, _ = _resolve_generated_pdf({"pdf_file_id": pdf_id})
+                if pdf_path and os.path.exists(pdf_path):
+                    gcs_path = _upload_to_gcs(pdf_path, g.current_user_id, doc.get("doc_type", ""))
+                    if gcs_path:
+                        update_fields["gcs_object_path"] = gcs_path
 
         result = current_coll.update_one(
             {"_id": oid, "user_id": g.current_user_id},
@@ -1519,6 +1477,166 @@ def api_serve_document_pdf(doc_id):
             return _database_error_response(e)
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+def _stamp_signature_to_pdf(input_pdf_path, output_pdf_path, signature_base64_str, user_name):
+    import io
+    import base64
+    from datetime import datetime, timezone, timedelta
+    from PIL import Image
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.utils import ImageReader
+
+    if "," in signature_base64_str:
+        signature_base64_str = signature_base64_str.split(",", 1)[1]
+
+    img_data = base64.b64decode(signature_base64_str)
+    img = Image.open(io.BytesIO(img_data))
+
+    reader = PdfReader(input_pdf_path)
+    writer = PdfWriter()
+
+    num_pages = len(reader.pages)
+    if num_pages == 0:
+        raise ValueError("Cannot sign an empty PDF")
+
+    last_page_idx = num_pages - 1
+    last_page = reader.pages[last_page_idx]
+    page_width = float(last_page.mediabox.width)
+    page_height = float(last_page.mediabox.height)
+
+    # Signature box coordinates (bottom right signature area)
+    sig_w = 120
+    sig_h = 45
+    sig_x = page_width - sig_w - 60
+    sig_y = 65
+
+    # Generate signature overlay PDF page using reportlab
+    packet = io.BytesIO()
+    can = canvas.Canvas(packet, pagesize=(page_width, page_height))
+    # Draw signature image on the canvas using ImageReader wrapper
+    img_reader = ImageReader(img)
+    can.drawImage(img_reader, sig_x, sig_y, sig_w, sig_h, mask='auto')
+
+    # Draw metadata labels
+    can.setFont("Helvetica-Bold", 8)
+    can.setFillColorRGB(0.1, 0.1, 0.4)  # Dark Blue
+    can.drawString(sig_x, sig_y + sig_h + 5, "Digitally Signed By:")
+
+    can.setFont("Helvetica", 8)
+    can.setFillColorRGB(0.3, 0.3, 0.3)  # Slate Gray
+    can.drawString(sig_x, sig_y + sig_h - 5, user_name)
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(ist_tz)
+    can.drawString(sig_x, sig_y - 12, now_ist.strftime("%d-%b-%Y %I:%M %p IST"))
+
+    can.save()
+    packet.seek(0)
+    sig_reader = PdfReader(packet)
+    sig_page = sig_reader.pages[0]
+
+    # Copy pages to writer
+    for i in range(num_pages):
+        page = reader.pages[i]
+        if i == last_page_idx:
+            page.merge_page(sig_page)
+        writer.add_page(page)
+
+    with open(output_pdf_path, "wb") as f:
+        writer.write(f)
+
+
+@app.route("/api/documents/<doc_id>/sign", methods=["POST"])
+@require_auth
+def api_sign_document(doc_id):
+    """Stamp digital signature on the last page of a trade confirmation PDF."""
+    try:
+        db = get_db()
+        oid = ObjectId(doc_id)
+        doc = db.documents.find_one({"_id": oid, "user_id": g.current_user_id})
+        if not doc:
+            return jsonify({"error": "Document not found"}), 404
+
+        if doc.get("signed"):
+            return jsonify({"error": "Document is already signed"}), 400
+
+        body = _json_body()
+        signature_data = body.get("signature_data", "")
+        if not signature_data:
+            return jsonify({"error": "Missing signature_data"}), 400
+
+        file_id = doc.get("pdf_file_id", "")
+        if not file_id:
+            return jsonify({"error": "No PDF stored for this document"}), 400
+
+        body_pdf = {"pdf_file_id": file_id}
+        pdf_path, pdf_filename = _resolve_generated_pdf(body_pdf)
+
+        # If not cached locally, pull from GCS first
+        if not pdf_path or not os.path.exists(pdf_path):
+            gcs_path = doc.get("gcs_object_path", "")
+            if not gcs_path:
+                return jsonify({"error": "PDF file not cached locally and no cloud backup found"}), 404
+
+            pdf_bytes = _download_from_gcs(gcs_path)
+            if not pdf_bytes:
+                return jsonify({"error": "Failed to retrieve PDF file from cloud backup"}), 404
+
+            user_id = g.current_user_id
+            if file_id and ":" in file_id:
+                job_id, filename = file_id.split(":", 1)
+                job_id = secure_filename(job_id)
+                job_dir = os.path.join(TEMP_PDF_DIR, user_id, job_id)
+                os.makedirs(job_dir, exist_ok=True)
+                pdf_path = os.path.join(job_dir, filename)
+            else:
+                job_dir = os.path.join(TEMP_PDF_DIR, user_id, "temp_downloads")
+                os.makedirs(job_dir, exist_ok=True)
+                pdf_path = os.path.join(job_dir, "document.pdf")
+
+            with open(pdf_path, "wb") as f:
+                f.write(pdf_bytes)
+
+        user = db.users.find_one({"_id": ObjectId(g.current_user_id)})
+        user_name = user.get("name", "Authorized Signatory") if user else "Authorized Signatory"
+
+        temp_signed_path = pdf_path + ".signed"
+        _stamp_signature_to_pdf(pdf_path, temp_signed_path, signature_data, user_name)
+
+        # Replace original cached file
+        shutil.move(temp_signed_path, pdf_path)
+
+        # Overwrite GCS version if available
+        gcs_object_path = doc.get("gcs_object_path", "")
+        if GCS_AVAILABLE and gcs_object_path:
+            _upload_to_gcs(pdf_path, g.current_user_id, doc.get("doc_type", ""))
+
+        # Update DB document status
+        now = datetime.now(timezone.utc).isoformat()
+        db.documents.update_one(
+            {"_id": oid},
+            {"$set": {
+                "signed": True,
+                "signed_at": now,
+                "validation_status": "verified",
+                "updated_at": now
+            }}
+        )
+
+        return jsonify({
+            "status": "success",
+            "pdf_url": f"/api/documents/{doc_id}/pdf?t={int(time.time())}"
+        })
+
+    except Exception as e:
+        if isinstance(e, InvalidId):
+            return jsonify({"error": "Invalid document id"}), 400
+        if isinstance(e, (ServerSelectionTimeoutError, PyMongoError)):
+            return _database_error_response(e)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 
 
 # ═══════════════════════════════════════════
@@ -1820,7 +1938,6 @@ def api_validate():
                 db.documents.update_one(
                     {"_id": oid, "user_id": g.current_user_id},
                     {"$set": {
-                        "validation_status": "verified",
                         "validation_report": validation_report_text,
                         "updated_at": _iso_now()
                     }}
@@ -1865,6 +1982,297 @@ def api_get_validation_report(doc_id):
     except Exception as e:
         if isinstance(e, (ServerSelectionTimeoutError, PyMongoError)):
             return _database_error_response(e)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════
+# WORKFLOW EXECUTION / EMAIL SENDING ENDPOINT
+# ═══════════════════════════════════════════
+
+@app.route("/api/workflow/execute", methods=["POST"])
+@require_auth
+def api_execute_workflow():
+    """Execute the visual workflow, calling Groq to draft an email and sending it via SMTP."""
+    try:
+        body = _json_body()
+        input_text = body.get("input_text", "")
+        prompt = body.get("prompt", "")
+        recipient_emails = body.get("recipients", [])
+        pdf_file_id = body.get("pdf_file_id", "")
+        pdf_filename = body.get("pdf_filename", "")
+
+        custom_sender = body.get("custom_sender", {})
+        
+        # 1. Resolve SMTP credentials
+        custom_pwd = custom_sender.get("smtp_password")
+        if custom_pwd:
+            # Full custom SMTP login
+            smtp_host = custom_sender.get("smtp_host") or "smtp.gmail.com"
+            try:
+                smtp_port = int(custom_sender.get("smtp_port") or "587")
+            except ValueError:
+                smtp_port = 587
+            smtp_user = custom_sender.get("smtp_user")
+            smtp_password = custom_pwd
+            smtp_from_name = custom_sender.get("smtp_from_name") or "TradeDoc AI Operations"
+            reply_to_email = smtp_user
+        else:
+            # Use default system SMTP credentials, but customize from/reply-to headers
+            smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+            try:
+                smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+            except ValueError:
+                smtp_port = 587
+            smtp_user = os.environ.get("SMTP_USER")
+            smtp_password = os.environ.get("SMTP_PASSWORD")
+            
+            custom_name = custom_sender.get("smtp_from_name")
+            custom_email = custom_sender.get("smtp_user")
+            
+            if custom_name and custom_email:
+                smtp_from_name = f"{custom_name} ({custom_email})"
+            elif custom_name:
+                smtp_from_name = custom_name
+            elif custom_email:
+                smtp_from_name = f"TradeDoc Operations ({custom_email})"
+            else:
+                smtp_from_name = os.environ.get("SMTP_FROM_NAME", "TradeDoc AI Operations")
+                
+            reply_to_email = custom_email or smtp_user
+
+        if not smtp_user or not smtp_password:
+            return jsonify({"error": "SMTP credentials (user/password) not configured in .env or custom sender node"}), 400
+
+        if not recipient_emails:
+            return jsonify({"error": "No recipient emails provided"}), 400
+
+        # 2. Resolve PDF if provided
+        pdf_path = None
+        pdf_display_name = "trade_confirmation.pdf"
+        
+        if pdf_file_id:
+            doc = None
+            try:
+                # Check if it looks like a 24-character hex ObjectId
+                if len(pdf_file_id) == 24 and all(c in "0123456789abcdefABCDEF" for c in pdf_file_id):
+                    doc = get_db().documents.find_one({"_id": ObjectId(pdf_file_id), "user_id": g.current_user_id})
+            except Exception:
+                pass
+                
+            if doc:
+                # Resolve from document metadata
+                real_file_id = doc.get("pdf_file_id")
+                gcs_path = doc.get("gcs_object_path")
+                doc_name = doc.get("summary", "trade_confirmation")
+                
+                if not doc_name.lower().endswith(".pdf"):
+                    pdf_display_name = secure_filename(doc_name) + ".pdf"
+                else:
+                    pdf_display_name = secure_filename(doc_name)
+                
+                # Check local disk
+                if real_file_id:
+                    resolved_path, resolved_name = _resolve_generated_pdf({"pdf_file_id": real_file_id})
+                    if resolved_path and os.path.exists(resolved_path):
+                        pdf_path = resolved_path
+                
+                # Download from GCS if not present locally
+                if not pdf_path and gcs_path:
+                    print(f"  ☁️  Downloading selected PDF from GCS: {gcs_path}")
+                    pdf_bytes = _download_from_gcs(gcs_path)
+                    if pdf_bytes:
+                        temp_job_dir = os.path.join(TEMP_PDF_DIR, g.current_user_id, "workflow_downloads")
+                        os.makedirs(temp_job_dir, exist_ok=True)
+                        temp_pdf_path = os.path.join(temp_job_dir, pdf_display_name)
+                        with open(temp_pdf_path, "wb") as f:
+                            f.write(pdf_bytes)
+                        pdf_path = temp_pdf_path
+                        print(f"  ✅ Cached GCS PDF locally at: {pdf_path}")
+            else:
+                # Fallback to legacy string check
+                resolved_path, resolved_name = _resolve_generated_pdf({"pdf_file_id": pdf_file_id, "pdf_filename": pdf_filename})
+                if resolved_path:
+                    pdf_path = resolved_path
+                    pdf_display_name = resolved_name
+        elif pdf_filename:
+            resolved_path, resolved_name = _resolve_generated_pdf({"pdf_filename": pdf_filename})
+            if resolved_path:
+                pdf_path = resolved_path
+                pdf_display_name = resolved_name
+        
+        # 3. Call Groq to generate a professional email body
+        groq_prompt = (
+            "You are a professional operations officer at a financial institution drafting a trade confirmation email. "
+            f"Write a highly professional and polite email using the following instructions: '{prompt}'.\n"
+            f"Here is the context or source details of the trade/email:\n---\n{input_text}\n---\n"
+            "Generate only the email body. Make sure the email sounds polite, professional, and clear. Do not include subject lines in the output content itself, just the email body starting with a professional salutation and ending with a professional sign-off (leave placeholders for names if not known)."
+        )
+        email_body = call_groq(groq_prompt, max_tokens=1000, temperature=0.3)
+
+        # 4. Construct professional HTML Email and Send
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.base import MIMEBase
+        from email import encoders
+
+        success_count = 0
+        failed_recipients = []
+
+        for recipient in recipient_emails:
+            recipient = recipient.strip()
+            if not recipient:
+                continue
+            
+            # Create message container
+            msg = MIMEMultipart("related")
+            msg["Subject"] = f"Trade Confirmation Document: {pdf_display_name.replace('.pdf', '')}"
+            msg["From"] = f"{smtp_from_name} <{smtp_user}>"
+            msg["To"] = recipient
+            if reply_to_email:
+                msg["Reply-To"] = reply_to_email
+
+            # Build HTML body
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <meta charset="utf-8">
+              <style>
+                body {{
+                  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                  color: #334155;
+                  background-color: #ffffff;
+                  margin: 0;
+                  padding: 0;
+                  -webkit-font-smoothing: antialiased;
+                }}
+                .container {{
+                  width: 100%;
+                  margin: 0;
+                  background-color: #ffffff;
+                  overflow: hidden;
+                }}
+                .header {{
+                  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 60%, #4f46e5 100%);
+                  padding: 55px 30px;
+                  text-align: center;
+                  color: #ffffff;
+                  border-bottom: 4px solid #6366f1;
+                  width: 100%;
+                  box-sizing: border-box;
+                }}
+                .content {{
+                  max-width: 650px;
+                  margin: 0 auto;
+                  padding: 45px 24px;
+                  line-height: 1.8;
+                  font-size: 15px;
+                  color: #1e293b;
+                }}
+                .footer {{
+                  max-width: 650px;
+                  margin: 0 auto;
+                  padding: 30px 24px;
+                  text-align: center;
+                  font-size: 11px;
+                  color: #94a3b8;
+                  border-top: 1px solid #f1f5f9;
+                  letter-spacing: 0.02em;
+                }}
+                .attachment-box {{
+                  margin-top: 30px;
+                  padding: 18px;
+                  background-color: #f8fafc;
+                  border: 1.5px dashed #cbd5e1;
+                  border-radius: 12px;
+                  display: flex;
+                  align-items: center;
+                  gap: 12px;
+                }}
+              </style>
+            </head>
+            <body>
+              <div class="container">
+                <div class="header">
+                  <div style="font-size: 10px; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; color: #818cf8; margin-bottom: 8px;">Automated Operations Portal</div>
+                  <h1 style="margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.03em; color: #ffffff;">TradeDoc AI</h1>
+                  <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px; font-weight: 500;">Secure Trade Confirmation Service</div>
+                </div>
+                <div class="content">
+                  <div style="font-family: inherit; font-size: 15px; color: #334155;">
+                    {email_body.replace('\n', '<br>')}
+                  </div>
+                  
+                  {f'''
+                  <div class="attachment-box">
+                    <span style="font-size: 28px; vertical-align: middle;">📄</span>
+                    <div style="display: inline-block; vertical-align: middle; margin-left: 8px;">
+                      <strong style="color: #0f172a; font-size: 14px;">{pdf_display_name}</strong><br>
+                      <span style="color: #64748b; font-size: 12px;">Trade Confirmation PDF attached. Please review and sign.</span>
+                    </div>
+                  </div>
+                  ''' if pdf_path else ''}
+                </div>
+                <div class="footer">
+                  This is an automated trade confirmation notification generated securely by TradeDoc AI.<br>
+                  &copy; {datetime.now().year} TradeDoc AI. All rights reserved.
+                </div>
+              </div>
+            </body>
+            </html>
+            """
+            
+            msg_alternative = MIMEMultipart("alternative")
+            msg.attach(msg_alternative)
+
+            # Plain text fallback
+            text_part = MIMEText(email_body, "plain")
+            msg_alternative.attach(text_part)
+
+            # HTML part
+            html_part = MIMEText(html_content, "html")
+            msg_alternative.attach(html_part)
+
+            # Attach PDF if available
+            if pdf_path and os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    part = MIMEBase("application", "octet-stream")
+                    part.set_payload(f.read())
+                    encoders.encode_base64(part)
+                    part.add_header(
+                        "Content-Disposition",
+                        f"attachment; filename={pdf_display_name}",
+                    )
+                    msg.attach(part)
+
+            # Send email
+            try:
+                if smtp_port == 465:
+                    server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+                else:
+                    server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                
+                server.login(smtp_user, smtp_password)
+                server.sendmail(smtp_user, recipient, msg.as_string())
+                server.quit()
+                success_count += 1
+            except Exception as mail_err:
+                traceback.print_exc()
+                failed_recipients.append({"recipient": recipient, "error": str(mail_err)})
+
+        return jsonify({
+            "status": "complete",
+            "success_count": success_count,
+            "failed_recipients": failed_recipients,
+            "email_draft": email_body
+        }), 200
+
+    except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 

@@ -61,10 +61,14 @@ export default function MyDocumentsUI({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  // Filter documents by type and draft status
+  // Filter documents by type and status:
+  // - 'drafts' tab contains: actual drafts (doc.is_draft) OR unsigned documents (validation_status === 'pending')
+  // - asset tabs contain: only signed/verified documents (validation_status === 'verified')
   const filteredDocs = documents.filter((doc) => {
-    if (activeTab === 'drafts') return doc.is_draft;
-    return !doc.is_draft && doc.doc_type === activeTab;
+    if (activeTab === 'drafts') {
+      return doc.is_draft || doc.validation_status === 'pending';
+    }
+    return !doc.is_draft && doc.validation_status === 'verified' && doc.doc_type === activeTab;
   });
 
   // Helper to get a descriptive title from doc data
@@ -165,8 +169,10 @@ export default function MyDocumentsUI({
       <div className="flex max-w-full gap-2 overflow-x-auto bg-slate-100/50 p-1.5 rounded-2xl border border-slate-100 w-full sm:w-fit">
         {DOC_TYPES.map((type) => {
           const count = documents.filter((doc) => {
-            if (type.id === 'drafts') return doc.is_draft;
-            return !doc.is_draft && doc.doc_type === type.id;
+            if (type.id === 'drafts') {
+              return doc.is_draft || doc.validation_status === 'pending';
+            }
+            return !doc.is_draft && doc.validation_status === 'verified' && doc.doc_type === type.id;
           }).length;
 
           return (
@@ -294,19 +300,15 @@ export default function MyDocumentsUI({
                     )}
                     <div
                       className={`w-1.5 h-1.5 rounded-full ${
-                        doc.is_draft
+                        doc.is_draft || doc.validation_status === 'pending'
                           ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
-                          : doc.validation_status === 'pending'
-                          ? 'bg-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.5)]'
                           : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
                       }`}
                     />
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      {doc.is_draft
+                      {doc.is_draft || doc.validation_status === 'pending'
                         ? 'In Progress'
-                        : doc.validation_status === 'pending'
-                        ? 'Pending Validation'
-                        : 'Verified Trade'}
+                        : 'Verified'}
                     </span>
                   </div>
                   <div className="text-right">
@@ -429,7 +431,7 @@ export default function MyDocumentsUI({
             {/* PDF iframe */}
             {pdfBlobUrl && !pdfLoading && !pdfError && (
               <iframe
-                src={pdfBlobUrl}
+                src={`${pdfBlobUrl}#toolbar=0`}
                 title={pdfFilename || 'PDF Preview'}
                 className="w-full h-full border-0"
                 style={{ minHeight: '100%' }}
@@ -445,7 +447,7 @@ export default function MyDocumentsUI({
                 <div>
                   <p className="font-bold text-text-secondary">Select a document to preview</p>
                   <p className="text-xs text-text-tertiary mt-1">
-                    Click a verified trade from the list to render its PDF here in Live Preview Mode.
+                    Click a trade from the list to render its PDF here in Live Preview Mode.
                   </p>
                 </div>
               </div>

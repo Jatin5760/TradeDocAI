@@ -59,8 +59,9 @@ export interface RecentDoc {
   validation_status?: 'pending' | 'verified';
   source_email?: string;
   gcs_object_path?: string;
+  signed?: boolean;
 }
 
-export type AppPage = 'landing' | 'analytics' | 'ai' | 'form' | 'pdf' | 'settings' | 'my-documents';
+export type AppPage = 'landing' | 'analytics' | 'ai' | 'form' | 'pdf' | 'settings' | 'my-documents' | 'workflow-builder';
 export type ModalType = 'none' | 'mode' | 'type' | 'preview' | 'new-doc';
 export type SettingsTab = 'edit-profile' | 'security';

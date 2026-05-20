@@ -25,15 +25,29 @@ _client = None
 
 def _get_client():
     global _client
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY is not set. AI endpoints are unavailable until it is configured.")
     if _client is None:
-        _client = genai.Client(api_key=api_key)
+        use_vertex = os.getenv("USE_VERTEX_AI", "true").lower() == "true"
+        if use_vertex:
+            # Set credentials file path
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(_PROJECT_ROOT / "gcs-service-account.json")
+            project_id = os.getenv("GCP_PROJECT_ID", "gen-lang-client-0887590510")
+            location = os.getenv("GCP_LOCATION", "us-central1")
+            print(f"🔌 Connecting to Gemini via Vertex AI (Project: {project_id})")
+            _client = genai.Client(
+                vertexai=True,
+                project=project_id,
+                location=location
+            )
+        else:
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            if not api_key:
+                raise RuntimeError("GEMINI_API_KEY is not set. AI Studio client cannot start.")
+            _client = genai.Client(api_key=api_key)
     return _client
 
 
-def call_gemini(prompt: str, max_retries: int = 5, model_name: str | None = None, generation_config: dict | None = None) -> str:
+
+def call_gemini(prompt: str, max_retries: int = 5, model_name: str | None = None, generation_config: dict | None = None, thinking_level: str | None = None) -> str:
     """
     Call Gemini for text-only tasks.
     Returns the response text.
@@ -43,11 +57,19 @@ def call_gemini(prompt: str, max_retries: int = 5, model_name: str | None = None
                        response_mime_type (e.g. "application/json").
     """
     primary_model = model_name or MODEL
-    # If the primary is a 2.x model, fallback to gemini-flash-latest if busy
-    fallback_model = "gemini-flash-latest" if ("2.0" in primary_model or "2.5" in primary_model) else None
+    use_vertex = os.getenv("USE_VERTEX_AI", "true").lower() == "true"
+    if use_vertex and primary_model == "gemini-flash-latest":
+        primary_model = "gemini-3.5-flash"
+        
+    fallback_default = "gemini-3.5-flash" if use_vertex else "gemini-flash-latest"
+    fallback_model = fallback_default if ("2.0" in primary_model or "2.5" in primary_model or "3.0" in primary_model or "3.1" in primary_model or "3.5" in primary_model or "pro" in primary_model) else None
     
-    # Build GenerateContentConfig if generation params provided
-    config = types.GenerateContentConfig(**generation_config) if generation_config else None
+    # Build GenerateContentConfig
+    config_dict = generation_config.copy() if generation_config else {}
+    if "3." in primary_model and "thinking_config" not in config_dict and thinking_level:
+        config_dict["thinking_config"] = types.ThinkingConfig(thinking_level=thinking_level)
+        
+    config = types.GenerateContentConfig(**config_dict) if config_dict else None
     
     for attempt in range(max_retries):
         use_model = primary_model
@@ -117,32 +139,43 @@ def call_gemini_stream(prompt: str, model_name: str | None = None, generation_co
                 yield f"[Error: {str(e)[:100]}]"
 
 
-def call_gemini_with_pdf(prompt: str, pdf_path: str, max_retries: int = 3, model_name: str | None = None) -> str:
+def call_gemini_with_pdf(prompt: str, pdf_path: str, max_retries: int = 3, model_name: str | None = None, thinking_level: str | None = None) -> str:
     """
     Call Gemini with a PDF file.
     Handles high demand (503) and rate limits (429) with retries and fallback.
     """
     primary_model = model_name or MODEL
-    fallback_model = "gemini-flash-latest" if ("2.0" in primary_model or "2.5" in primary_model) else None
+    use_vertex = os.getenv("USE_VERTEX_AI", "true").lower() == "true"
+    if use_vertex and primary_model == "gemini-flash-latest":
+        primary_model = "gemini-3.5-flash"
+        
+    fallback_default = "gemini-3.5-flash" if use_vertex else "gemini-flash-latest"
+    fallback_model = fallback_default if ("2.0" in primary_model or "2.5" in primary_model or "3.0" in primary_model or "3.1" in primary_model or "3.5" in primary_model or "pro" in primary_model) else None
     
     with open(pdf_path, "rb") as f:
         pdf_bytes = f.read()
-
+ 
     contents = [
         types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
         prompt
     ]
-
+ 
     for attempt in range(max_retries):
         use_model = primary_model
         if attempt == max_retries - 1 and fallback_model:
             use_model = fallback_model
             print(f"  🔄 Multimodal: Falling back to {use_model}...")
-
+ 
         try:
+            config = None
+            if "3." in use_model and thinking_level:
+                config = types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level=thinking_level)
+                )
             response = _get_client().models.generate_content(
                 model=use_model,
-                contents=contents
+                contents=contents,
+                config=config
             )
             return (response.text or "").strip()
         except Exception as e:
