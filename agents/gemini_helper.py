@@ -28,8 +28,10 @@ def _get_client():
     if _client is None:
         use_vertex = os.getenv("USE_VERTEX_AI", "true").lower() == "true"
         if use_vertex:
-            # Set credentials file path
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(_PROJECT_ROOT / "gcs-service-account.json")
+            # Use explicit credentials file if present (local dev), otherwise fall back to ADC (Cloud Run)
+            local_creds = _PROJECT_ROOT / "gcs-service-account.json"
+            if local_creds.exists():
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(local_creds)
             project_id = os.getenv("GCP_PROJECT_ID", "gen-lang-client-0887590510")
             location = os.getenv("GCP_LOCATION", "us-central1")
             print(f"🔌 Connecting to Gemini via Vertex AI (Project: {project_id})")
@@ -67,7 +69,9 @@ def call_gemini(prompt: str, max_retries: int = 5, model_name: str | None = None
     # Build GenerateContentConfig
     config_dict = generation_config.copy() if generation_config else {}
     if "3." in primary_model and "thinking_config" not in config_dict and thinking_level:
-        config_dict["thinking_config"] = types.ThinkingConfig(thinking_level=thinking_level)
+        tl = getattr(types.ThinkingLevel, thinking_level, None)
+        if tl:
+            config_dict["thinking_config"] = types.ThinkingConfig(thinking_level=tl)
         
     config = types.GenerateContentConfig(**config_dict) if config_dict else None
     
@@ -169,9 +173,11 @@ def call_gemini_with_pdf(prompt: str, pdf_path: str, max_retries: int = 3, model
         try:
             config = None
             if "3." in use_model and thinking_level:
-                config = types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_level=thinking_level)
-                )
+                tl = getattr(types.ThinkingLevel, thinking_level, None)
+                if tl:
+                    config = types.GenerateContentConfig(
+                        thinking_config=types.ThinkingConfig(thinking_level=tl)
+                    )
             response = _get_client().models.generate_content(
                 model=use_model,
                 contents=contents,

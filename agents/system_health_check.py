@@ -50,12 +50,16 @@ def run_check():
         log(f"❌ Server Connection Failed: {e}")
         return
 
+    # Shared variables for tests that depend on previous steps
+    extract_res: dict = {}
+    pdf_path: str | None = None
+
     # 2. EXTRACTION TEST (FAST MODE)
     log("▶ Testing AI EXTRACTION (Fast Mode)...")
     start = time.time()
     try:
-        # In this test we use the /ai/extract endpoint. 
-        # Note: In production this requires Auth. I will try to hit it. 
+        # In this test we use the /ai/extract endpoint.
+        # Note: In production this requires Auth. I will try to hit it.
         # If I get 401, I will check if I can bypass for local test.
         # But wait, I want to measure the logic time. I will call the python function directly!
         sys.path.append(str(_ROOT))
@@ -78,12 +82,12 @@ def run_check():
     try:
         from agents.pdf_agent import compile_pdf
         # Mocking state for the node
-        state = {
+        state: dict = {
             "extracted_json": extract_res.get('extracted_json', {}),
             "doc_type": "irs",
             "exhibit": "II-A"
         }
-        res_pdf = compile_pdf(state)
+        res_pdf = compile_pdf(state)  # type: ignore[arg-type]
         pdf_path = res_pdf.get("pdf_path")
         duration = time.time() - start
         if pdf_path:

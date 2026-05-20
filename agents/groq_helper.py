@@ -53,7 +53,8 @@ def call_groq(
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    return response.choices[0].message.content.strip()
+    content = response.choices[0].message.content
+    return content.strip() if content else ""
 
 
 def call_groq_stream(

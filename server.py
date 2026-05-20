@@ -162,10 +162,12 @@ def _storage_client():
         if not GCS_BUCKET_NAME:
             print("  ⚠️  GCS_BUCKET_NAME not set — GCS archival disabled")
             return None
-        if not os.path.exists(GCS_CREDENTIALS_PATH):
-            print(f"  ⚠️  GCS credentials not found at {GCS_CREDENTIALS_PATH} — GCS archival disabled")
-            return None
-        _gcs_client = storage.Client.from_service_account_json(GCS_CREDENTIALS_PATH)  # type: ignore[union-attr]
+        if os.path.exists(GCS_CREDENTIALS_PATH):
+            _gcs_client = storage.Client.from_service_account_json(GCS_CREDENTIALS_PATH)  # type: ignore[union-attr]
+        else:
+            # Cloud Run / no local key: use Application Default Credentials
+            print("  🔐 GCS using Application Default Credentials (ADC)")
+            _gcs_client = storage.Client()  # type: ignore[union-attr]
     return _gcs_client
 
 
@@ -561,7 +563,7 @@ def _mongo_db_name_from_uri(uri: str) -> str:
 
 
 def _mongo_db_name() -> str:
-    return MONGO_DB_NAME or _mongo_db_name_from_uri(MONGO_URI) or "tradedocai"
+    return MONGO_DB_NAME or _mongo_db_name_from_uri(MONGO_URI) or "tradedoc"
 
 
 def _mongo_client_options() -> dict:
@@ -2127,13 +2129,14 @@ def api_execute_workflow():
             
             # Create message container
             msg = MIMEMultipart("related")
-            msg["Subject"] = f"Trade Confirmation Document: {pdf_display_name.replace('.pdf', '')}"
+            msg["Subject"] = f"Trade Confirmation Document: {(pdf_display_name or '').replace('.pdf', '')}"
             msg["From"] = f"{smtp_from_name} <{smtp_user}>"
             msg["To"] = recipient
             if reply_to_email:
                 msg["Reply-To"] = reply_to_email
 
             # Build HTML body
+            email_body_html = email_body.replace('\n', '<br>')
             html_content = f"""
             <!DOCTYPE html>
             <html>
@@ -2202,7 +2205,7 @@ def api_execute_workflow():
                 </div>
                 <div class="content">
                   <div style="font-family: inherit; font-size: 15px; color: #334155;">
-                    {email_body.replace('\n', '<br>')}
+                    {email_body_html}
                   </div>
                   
                   {f'''
