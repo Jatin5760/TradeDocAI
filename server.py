@@ -904,9 +904,19 @@ def api_chat():
         scope = body.get("scope", "global")  # "local" = ChatSidebar form assistant, "global" = ChatCopilot
         stream = body.get("stream", False)   # SSE streaming for ChatGPT-like real-time output
 
+        # ── Adaptive detail detection (applies to both local and global scope) ──
+        msg_lower = user_msg.lower()
+        wants_detail = any(kw in msg_lower for kw in [
+            "in detail", "detailed", "elaborate", "explain more", "tell me more",
+            "examples", "example", "thorough", "deep dive", "break down", "expand",
+        ])
+
+        def _max_t(base: int) -> int:
+            """Default ~500 words / 700 tokens. Explicit detail ask → ~800 words / 1100 tokens."""
+            return 1100 if wants_detail else 700
+
         # ── Local Scope (ChatSidebar — Groq Llama 4 Scout, no DB, no session) ──
         if scope == "local" and doc_type and schema:
-            msg_lower = user_msg.lower()
             active_field_key = body.get("active_field_key")
             active_field_label = body.get("active_field_label", "")
             data_context = current_data or {}
@@ -1024,13 +1034,14 @@ def api_chat():
                     f"FILLED FIELDS: {json.dumps(filled, default=str)}\n"
                     f"REQUIRED FIELDS STILL EMPTY: {', '.join(required_labels[:20])}\n"
                     f"User asks: \"{user_msg}\"\n"
-                    f"Reply in 2-4 sentences. Use clean markdown (**bold** for section names, bullet lists for fields). "
+                    f"Use clean markdown (**bold** for section names, bullet lists for fields). "
                     f"Group remaining fields by section. "
-                    f"If only 1-2 fields remain, make it encouraging: \"Almost done! Just fill in...\" 70 words max. Do NOT mention filled fields."
+                    f"If only 1-2 fields remain, make it encouraging: \"Almost done! Just fill in...\" "
+                    f"Be friendly and helpful — explain what each remaining field means briefly. Do NOT mention filled fields."
                 )
                 if stream:
-                    return _groq_stream_response(prompt, max_tokens=180)
-                reply = call_groq(prompt, max_tokens=180)
+                    return _groq_stream_response(prompt, max_tokens=_max_t(180))
+                reply = call_groq(prompt, max_tokens=_max_t(180))
                 reply, _ = _extract_chat_action(reply, user_msg)
                 return _reply_local(reply)
 
@@ -1046,12 +1057,13 @@ def api_chat():
                     f"User asks: \"{user_msg}\"\n"
                     f"Review ONLY the filled fields above. Point out: wrong dates, nonsense values, "
                     f"inconsistent entries, type mismatches. Be specific — mention field names. "
-                    f"Reply in 2-4 sentences. Use clean markdown (**bold** for field names, bullet lists for issues). "
-                    f"If no issues, end with: \"**No obvious issues found** — everything looks good.\" Max 150 words."
+                    f"Use clean markdown (**bold** for field names, bullet lists for issues). "
+                    f"For each issue found, briefly explain why it might be wrong and suggest the correct format. "
+                    f"If no issues, end with: \"**No obvious issues found** — everything looks good.\""
                 )
                 if stream:
-                    return _groq_stream_response(prompt, max_tokens=280)
-                reply = call_groq(prompt, max_tokens=280)
+                    return _groq_stream_response(prompt, max_tokens=_max_t(280))
+                reply = call_groq(prompt, max_tokens=_max_t(280))
                 reply, action = _extract_chat_action(reply, user_msg)
                 return _reply_local(reply, action)
 
@@ -1067,13 +1079,14 @@ def api_chat():
                     f"FIELD: {field_label} (key: {active_field_key}) — type: {field_type}"
                     + (f", options: {json.dumps(options)[:200]}" if options else "")
                     + f"\nUser asks: \"{user_msg}\"\n"
-                    f"Reply in 2-3 sentences. Use clean markdown (**bold** for key terms, bullet lists for options). "
-                    f"Include: meaning, a short example, and a practical tip. "
-                    f"If select field, ALWAYS identify and recommend the best matching option from the list. Never say you're not aware — pick the closest one. Under 70 words."
+                    f"Use clean markdown (**bold** for key terms, bullet lists). "
+                    f"Include: meaning, a real-world example, and a practical tip. "
+                    f"If select field, ALWAYS identify and recommend the best matching option from the list. "
+                    f"Never say you're not aware — pick the closest one. Be conversational and helpful."
                 )
                 if stream:
-                    return _groq_stream_response(prompt, max_tokens=120)
-                reply = call_groq(prompt, max_tokens=120)
+                    return _groq_stream_response(prompt, max_tokens=_max_t(120))
+                reply = call_groq(prompt, max_tokens=_max_t(120))
                 reply, _ = _extract_chat_action(reply, user_msg)
                 return _reply_local(reply)
 
@@ -1082,12 +1095,12 @@ def api_chat():
                 prompt = (
                     f"DOCUMENT: {doc_display}\n"
                     f"User asks: \"{user_msg}\"\n"
-                    f"Reply in 3-4 sentences. Use clean markdown (**bold** for warnings, bullet lists for each mistake). "
-                    f"Be specific with examples. Under 80 words."
+                    f"Use clean markdown (**bold** for warnings, bullet lists for each mistake). "
+                    f"Be specific with real examples and explain the consequence of each mistake."
                 )
                 if stream:
-                    return _groq_stream_response(prompt, max_tokens=200)
-                reply = call_groq(prompt, max_tokens=200)
+                    return _groq_stream_response(prompt, max_tokens=_max_t(200))
+                reply = call_groq(prompt, max_tokens=_max_t(200))
                 reply, _ = _extract_chat_action(reply, user_msg)
                 return _reply_local(reply)
 
@@ -1096,12 +1109,13 @@ def api_chat():
                 prompt = (
                     f"DOCUMENT: {doc_display}\n"
                     f"User asks: \"{user_msg}\"\n"
-                    f"Reply in 2-4 sentences. Use clean markdown (**bold** for key concepts, bullet lists for examples). "
-                    f"Explain what this document is, where it's used, and 1-2 examples. Under 70 words."
+                    f"Use clean markdown (**bold** for key concepts, bullet lists for examples). "
+                    f"Explain what this document is, where it's used in the financial world, "
+                    f"and give real examples. Be engaging and informative."
                 )
                 if stream:
-                    return _groq_stream_response(prompt, max_tokens=150)
-                reply = call_groq(prompt, max_tokens=150)
+                    return _groq_stream_response(prompt, max_tokens=_max_t(150))
+                reply = call_groq(prompt, max_tokens=_max_t(150))
                 reply, _ = _extract_chat_action(reply, user_msg)
                 return _reply_local(reply)
 
@@ -1110,9 +1124,9 @@ def api_chat():
             prompt = build_casual_chat_prompt(doc_type, user_msg)
 
             if stream:
-                return _groq_stream_response(prompt, max_tokens=250)
+                return _groq_stream_response(prompt, max_tokens=_max_t(250))
 
-            reply = call_groq(prompt, max_tokens=250)
+            reply = call_groq(prompt, max_tokens=_max_t(250))
             reply, action = _extract_chat_action(reply, user_msg)
             return _reply_local(reply, action)
 
@@ -1129,7 +1143,7 @@ def api_chat():
         # 2. Regular AI Response — single message, no history context
         prompt = _build_chat_prompt(user_msg)
 
-        reply = call_groq(prompt, max_tokens=500)
+        reply = call_groq(prompt, max_tokens=_max_t(500))
         reply, action = _extract_chat_action(reply, user_msg)
 
         if action:
