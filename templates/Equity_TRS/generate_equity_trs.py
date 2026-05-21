@@ -118,32 +118,55 @@ def compile_to_pdf(tex_content, trade_data, output_dir=None):
 
 
 def _escape_latex(data):
-    """Recursively escape LaTeX special characters (&, %, $, #, etc.) in values."""
+    """Escape LaTeX special characters in trade data values recursively."""
     if isinstance(data, dict):
-        return {k: _escape_latex(v) for k, v in data.items()}
+        return {key: _escape_latex(val) for key, val in data.items()}
     elif isinstance(data, list):
-        return [_escape_latex(i) for i in data]
+        return [_escape_latex(item) for item in data]
     elif isinstance(data, str):
-        # Escape backslashes first, then other special chars
-        chars = {
-            '&': r'\&',
-            '%': r'\%',
-            '$': r'\$',
-            '#': r'\#',
-            '_': r'\_',
-            '{': r'\{',
-            '}': r'\}',
-            '~': r'\textasciitilde{}',
-            '^': r'\textasciicircum{}'
+        placeholders = {
+            r'\&': 'LATEXESCAMP',
+            r'\%': 'LATEXESCPCT',
+            r'\$': 'LATEXESCDOL',
+            r'\#': 'LATEXESCHASH',
+            r'\_': 'LATEXESCSUB',
+            r'\{': 'LATEXESCLBR',
+            r'\}': 'LATEXESCRBR',
+            r'\textasciitilde{}': 'LATEXESCTILDE',
+            r'\textasciicircum{}': 'LATEXESCCARET',
         }
-        # Special logic to avoid double escaping already escaped percentages (common in finance)
-        res = data
-        for char, escaped in chars.items():
-            # If the character is already preceded by a backslash, skip it
-            if f"\\{char}" not in res:
-                res = res.replace(char, escaped)
-        return res
-    return data
+        for escaped_seq, placeholder in placeholders.items():
+            data = data.replace(escaped_seq, placeholder)
+        
+        data = data.replace(r'\~', 'LATEXESCTILDE')
+        data = data.replace(r'\^', 'LATEXESCCARET')
+
+        data = data.replace('{', r'\{')
+        data = data.replace('}', r'\}')
+        data = data.replace('~', r'\textasciitilde{}')
+        data = data.replace('^', r'\textasciicircum{}')
+        data = data.replace('&', r'\&')
+        data = data.replace('%', r'\%')
+        data = data.replace('$', r'\$')
+        data = data.replace('#', r'\#')
+        data = data.replace('_', r'\_')
+        
+        restorations = {
+            'LATEXESCAMP': r'\&',
+            'LATEXESCPCT': r'\%',
+            'LATEXESCDOL': r'\$',
+            'LATEXESCHASH': r'\#',
+            'LATEXESCSUB': r'\_',
+            'LATEXESCLBR': r'\{',
+            'LATEXESCRBR': r'\}',
+            'LATEXESCTILDE': r'\textasciitilde{}',
+            'LATEXESCCARET': r'\textasciicircum{}',
+        }
+        for placeholder, escaped_seq in restorations.items():
+            data = data.replace(placeholder, escaped_seq)
+        return data
+    else:
+        return data
 
 
 def generate_pdf(trade_data: dict, output_dir: str = None) -> str:

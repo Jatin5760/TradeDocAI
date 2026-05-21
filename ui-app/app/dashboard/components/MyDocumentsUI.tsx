@@ -242,8 +242,10 @@ export default function MyDocumentsUI({
                   <div
                     className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-sm ${
                       doc.is_draft
-                        ? 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white'
-                        : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white'
+                        ? 'bg-orange-50 text-orange-600 group-hover:bg-orange-600 group-hover:text-white'
+                        : (!doc.is_draft && doc.validation_status === 'pending')
+                          ? 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white'
+                          : 'bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white'
                     }`}
                   >
                     <svg
@@ -260,6 +262,13 @@ export default function MyDocumentsUI({
                           strokeWidth="2"
                           d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                         />
+                      ) : (!doc.is_draft && doc.validation_status === 'pending') ? (
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
                       ) : (
                         <path
                           strokeLinecap="round"
@@ -274,8 +283,10 @@ export default function MyDocumentsUI({
                     <p
                       className={`text-sm font-bold truncate transition-colors ${
                         doc.is_draft
-                          ? 'text-slate-800 group-hover:text-amber-600'
-                          : 'text-slate-800 group-hover:text-indigo-600'
+                          ? 'text-slate-800 group-hover:text-orange-600'
+                          : (!doc.is_draft && doc.validation_status === 'pending')
+                            ? 'text-slate-800 group-hover:text-amber-600'
+                            : 'text-slate-800 group-hover:text-indigo-600'
                       }`}
                     >
                       {getSmartTitle(doc)}
@@ -300,15 +311,19 @@ export default function MyDocumentsUI({
                     )}
                     <div
                       className={`w-1.5 h-1.5 rounded-full ${
-                        doc.is_draft || doc.validation_status === 'pending'
-                          ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
-                          : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                        doc.is_draft
+                          ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]'
+                          : (!doc.is_draft && doc.validation_status === 'pending')
+                            ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
+                            : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
                       }`}
                     />
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                      {doc.is_draft || doc.validation_status === 'pending'
+                      {doc.is_draft
                         ? 'In Progress'
-                        : 'Verified'}
+                        : (!doc.is_draft && doc.validation_status === 'pending')
+                          ? 'Pending Review'
+                          : 'Verified'}
                     </span>
                   </div>
                   <div className="text-right">

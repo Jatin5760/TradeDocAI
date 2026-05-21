@@ -118,35 +118,60 @@ def generate_pdf(trade_data: dict, output_dir: str = None) -> str:
 
 
 def _escape_latex(data):
-    """Escape LaTeX special characters in trade data values."""
-    escaped = {}
-    for key, value in data.items():
-        if isinstance(value, str):
-            # Escape % for LaTeX (but not already escaped ones)
-            value = value.replace('\\%', '__ESCAPED_PCT__')
-            value = value.replace('%', '\\%')
-            value = value.replace('__ESCAPED_PCT__', '\\%')
-            # Escape & for LaTeX
-            value = value.replace('\\&', '__ESCAPED_AMP__')
-            value = value.replace('&', '\\&')
-            value = value.replace('__ESCAPED_AMP__', '\\&')
-            escaped[key] = value
-        elif isinstance(value, list):
-            escaped[key] = [_escape_latex_item(item) for item in value]
-        else:
-            escaped[key] = value
-    return escaped
+    """Escape LaTeX special characters in trade data values recursively."""
+    if isinstance(data, dict):
+        return {key: _escape_latex(val) for key, val in data.items()}
+    elif isinstance(data, list):
+        return [_escape_latex(item) for item in data]
+    elif isinstance(data, str):
+        placeholders = {
+            r'\&': 'LATEXESCAMP',
+            r'\%': 'LATEXESCPCT',
+            r'\$': 'LATEXESCDOL',
+            r'\#': 'LATEXESCHASH',
+            r'\_': 'LATEXESCSUB',
+            r'\{': 'LATEXESCLBR',
+            r'\}': 'LATEXESCRBR',
+            r'\textasciitilde{}': 'LATEXESCTILDE',
+            r'\textasciicircum{}': 'LATEXESCCARET',
+        }
+        for escaped_seq, placeholder in placeholders.items():
+            data = data.replace(escaped_seq, placeholder)
+        
+        data = data.replace(r'\~', 'LATEXESCTILDE')
+        data = data.replace(r'\^', 'LATEXESCCARET')
+
+        data = data.replace('{', r'\{')
+        data = data.replace('}', r'\}')
+        data = data.replace('~', r'\textasciitilde{}')
+        data = data.replace('^', r'\textasciicircum{}')
+        data = data.replace('&', r'\&')
+        data = data.replace('%', r'\%')
+        data = data.replace('$', r'\$')
+        data = data.replace('#', r'\#')
+        data = data.replace('_', r'\_')
+        
+        restorations = {
+            'LATEXESCAMP': r'\&',
+            'LATEXESCPCT': r'\%',
+            'LATEXESCDOL': r'\$',
+            'LATEXESCHASH': r'\#',
+            'LATEXESCSUB': r'\_',
+            'LATEXESCLBR': r'\{',
+            'LATEXESCRBR': r'\}',
+            'LATEXESCTILDE': r'\textasciitilde{}',
+            'LATEXESCCARET': r'\textasciicircum{}',
+        }
+        for placeholder, escaped_seq in restorations.items():
+            data = data.replace(placeholder, escaped_seq)
+        return data
+    else:
+        return data
 
 
 def _escape_latex_item(item):
     """Escape LaTeX chars in a list item (string or dict)."""
-    if isinstance(item, str):
-        item = item.replace('%', '\\%').replace('&', '\\&')
-        return item
-    elif isinstance(item, dict):
-        return {k: v.replace('%', '\\%').replace('&', '\\&') if isinstance(v, str) else v
-                for k, v in item.items()}
-    return item
+    return _escape_latex(item)
 
 
 def main():

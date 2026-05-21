@@ -242,27 +242,33 @@ export default function RecentDocuments({ documents, onLoad, onView, onCreateNew
                       {docTypeName(doc.doc_type)}
                     </span>
                   </td>
-                  <td className="px-3 sm:px-6 py-3 sm:py-4">
+                   <td className="px-3 sm:px-6 py-3 sm:py-4">
                     <div className="flex items-center gap-2">
                       <span
                         className="w-1.5 h-1.5 rounded-full"
                         style={{
-                          background: doc.is_draft || doc.validation_status === 'pending'
-                            ? '#f59e0b'
-                            : '#10b981'
+                          background: doc.is_draft
+                            ? '#ea580c'
+                            : (!doc.is_draft && doc.validation_status === 'pending')
+                              ? '#d97706'
+                              : '#10b981'
                         }}
                       />
                       <span
                         className="text-[12px] font-bold"
                         style={{
-                          color: doc.is_draft || doc.validation_status === 'pending'
-                            ? '#f59e0b'
-                            : '#10b981'
+                          color: doc.is_draft
+                            ? '#ea580c'
+                            : (!doc.is_draft && doc.validation_status === 'pending')
+                              ? '#d97706'
+                              : '#10b981'
                         }}
                       >
-                        {doc.is_draft || doc.validation_status === 'pending'
+                        {doc.is_draft
                           ? 'In Progress'
-                          : 'Verified'}
+                          : (!doc.is_draft && doc.validation_status === 'pending')
+                            ? 'Pending Review'
+                            : 'Verified'}
                       </span>
                     </div>
                   </td>
@@ -280,13 +286,17 @@ export default function RecentDocuments({ documents, onLoad, onView, onCreateNew
                       {/* View PDF — disabled for in-progress drafts */}
                       {doc.is_draft ? (
                         <span
-                          title="PDF not available — document is still in progress"
-                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 cursor-not-allowed transition-all"
+                          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 cursor-not-allowed transition-all relative group"
                         >
                           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
+                          {/* Instant Tooltip */}
+                          <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-900 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg shadow-xl whitespace-nowrap z-50 pointer-events-none border border-slate-800">
+                            PDF in progress
+                            <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                          </span>
                         </span>
                       ) : (
                         <button

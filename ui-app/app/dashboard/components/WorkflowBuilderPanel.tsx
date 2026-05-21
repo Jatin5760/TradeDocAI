@@ -40,14 +40,14 @@ export default function WorkflowBuilderPanel({
       id: 'sender-1',
       type: 'sender',
       x: 50,
-      y: 50,
+      y: 20,
       data: { smtp_host: 'smtp.gmail.com', smtp_port: '587', smtp_user: 'jatinsharma14202003@gmail.com', smtp_password: '', smtp_from_name: 'TradeDoc Operations', show_advanced: 'false' },
     },
     {
       id: 'pdf-1',
       type: 'pdf',
       x: 50,
-      y: 320,
+      y: 270,
       data: { pdf_file_id: '', pdf_filename: '' },
     },
     {
@@ -865,27 +865,27 @@ export default function WorkflowBuilderPanel({
             </div>
           </>
         ) : (
-          /* Logs Panel View */
-          <div className="flex-1 p-6 flex flex-col h-full bg-slate-900 font-mono text-slate-200 overflow-y-auto">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-800">
-              <span className="text-xs font-bold text-slate-400">EXECUTION CONSOLE LOGS</span>
+          /* Logs Panel View (Light Theme) */
+          <div className="flex-1 p-6 flex flex-col h-full bg-slate-50 font-mono text-slate-700 overflow-y-auto border border-slate-200/80 rounded-2xl shadow-inner">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-200">
+              <span className="text-xs font-bold text-slate-500">EXECUTION CONSOLE LOGS</span>
               <button
                 onClick={() => setExecutionLogs([])}
-                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300"
+                className="px-2 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-600 transition-colors shadow-sm cursor-pointer"
               >
                 Clear Console
               </button>
             </div>
             <div className="flex-1 mt-4 space-y-2 text-xs">
               {executionLogs.length === 0 ? (
-                <div className="text-slate-500 italic text-center pt-10">No execution logs. Click "Run Workflow" to trigger.</div>
+                <div className="text-slate-400 italic text-center pt-10">No execution logs. Click "Run Workflow" to trigger.</div>
               ) : (
                 executionLogs.map((log, index) => {
-                  let colorClass = 'text-slate-300';
-                  if (log.includes('✅')) colorClass = 'text-emerald-400 font-semibold';
-                  else if (log.includes('❌')) colorClass = 'text-rose-400 font-semibold';
-                  else if (log.includes('⚠️')) colorClass = 'text-amber-400';
-                  else if (log.includes('📤')) colorClass = 'text-cyan-400';
+                  let colorClass = 'text-slate-600';
+                  if (log.includes('✅')) colorClass = 'text-emerald-600 font-semibold';
+                  else if (log.includes('❌')) colorClass = 'text-rose-600 font-semibold';
+                  else if (log.includes('⚠️')) colorClass = 'text-amber-600';
+                  else if (log.includes('📤')) colorClass = 'text-cyan-600';
                   return (
                     <div key={index} className={`whitespace-pre-wrap leading-relaxed ${colorClass}`}>
                       {log}

@@ -116,7 +116,7 @@ export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPa
                     <button
                       key={item.label}
                       onClick={() => { onSetPage(item.page); onCloseMobile?.(); }}
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative"
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative cursor-pointer hover:bg-slate-900/[0.03] active:scale-[0.98]"
                       style={{
                         background: isActive ? 'rgba(24, 20, 243, 0.06)' : 'transparent',
                       }}
@@ -146,12 +146,6 @@ export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPa
 
         {/* Footer Section */}
         <div className="px-4 pb-8 space-y-4">
-          <div style={{ height: '1px', background: 'var(--border)', margin: '0 8px' }} className="opacity-50" />
-          
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-text-tertiary hover:bg-bg-main transition-all group">
-            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="group-hover:text-primary transition-colors"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <span style={{ fontFamily: "var(--font-inter)", fontSize: '14px', fontWeight: 500 }}>Support</span>
-          </button>
 
           {/* User Profile Card */}
           <div className="bg-bg-main/50 rounded-[24px] p-4 flex items-center gap-3 border border-border-secondary/30 shadow-sm">

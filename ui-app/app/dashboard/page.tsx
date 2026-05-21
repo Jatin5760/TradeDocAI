@@ -18,7 +18,7 @@ import ChatCopilot from './components/ChatCopilot';
 import ChatSidebar from './components/ChatSidebar';
 
 // Replicated Components
-import DocumentOverviewCards, { TimeSavedCard } from './components/DocumentOverviewCards';
+import DocumentOverviewCards, { StatusOverviewCard, TimeSavedCard } from './components/DocumentOverviewCards';
 import MoneySavedCard from './components/MoneySavedCard';
 import RecentActivitySection from './components/RecentActivitySection';
 import ActivityChart from './components/ActivityChart';
@@ -99,6 +99,15 @@ export default function DashboardPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [stepData, setStepData] = useState<Record<string, unknown>>({});
   const [irsSelections, setIrsSelections] = useState<Record<string, string>>({});
+  const [isFormRestoring, setIsFormRestoring] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlPage = new URLSearchParams(window.location.search).get('page');
+      const storedSchemaId = sessionStorage.getItem('formActiveSchemaId');
+      return urlPage === 'form' && !!storedSchemaId;
+    }
+    return false;
+  });
+  const [isEditingDocVerified, setIsEditingDocVerified] = useState(false);
   const [activeFieldKey, setActiveFieldKey] = useState<string | null>(null);
   const [aiMode, setAiMode] = useState(false);
   const [aiEmailText, setAiEmailText] = useState('');
@@ -123,6 +132,7 @@ export default function DashboardPage() {
   const [backendError, setBackendError] = useState('');
   const [settingsSub, setSettingsSub] = useState<SettingsTab>(getInitialSettingsTab);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [pendingReviewDoc, setPendingReviewDoc] = useState<RecentDoc | null>(null);
   const previousPageRef = useRef<AppPage | null>(null);
   const currentPageRef = useRef<AppPage>('landing');
   const stepperRef = useRef<HTMLDivElement>(null);
@@ -229,6 +239,19 @@ export default function DashboardPage() {
   };
   const hideLoading = () => setLoading(false);
 
+  const clearFormSession = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('formActiveSchemaId');
+      sessionStorage.removeItem('formCurrentStep');
+      sessionStorage.removeItem('formStepData');
+      sessionStorage.removeItem('formIrsSelections');
+      sessionStorage.removeItem('formEditingDocId');
+      sessionStorage.removeItem('formAiMode');
+      sessionStorage.removeItem('formAiEmailText');
+      sessionStorage.removeItem('formIsEditingDocVerified');
+    }
+  }, []);
+
   // ── Navigation Logic ──────────────────────
   const goHome = useCallback(() => {
     setSidebarOpen(false);
@@ -240,11 +263,20 @@ export default function DashboardPage() {
     setAiMode(false);
     setAiEmailText('');
     setEditingDocId(null);
+    setIsEditingDocVerified(false);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('activePdfDocId');
+    }
+    clearFormSession();
     fetchRecentDocs();
     setModal('none');
-  }, [fetchRecentDocs]);
+  }, [fetchRecentDocs, clearFormSession]);
 
   const handleBack = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('activePdfDocId');
+    }
+    clearFormSession();
     // If we came to form/pdf from my-documents, go back to my-documents
     if ((page === 'form' || page === 'pdf') && previousPageRef.current === 'my-documents') {
       setPage('my-documents');
@@ -255,12 +287,13 @@ export default function DashboardPage() {
       setAiMode(false);
       setAiEmailText('');
       setEditingDocId(null);
+      setIsEditingDocVerified(false);
       setModal('none');
     } else {
       // From any other source, go home
       goHome();
     }
-  }, [page, goHome]);
+  }, [page, goHome, clearFormSession]);
 
   // ── Core Operations ───────────────────────
   const assembleJSON = useCallback((): Record<string, unknown> => {
@@ -383,7 +416,11 @@ export default function DashboardPage() {
       setCurrentPdfFilename(filename);
       
       // Finalize the document when PDF is generated (pass pdf_file_id)
-      await saveDocument(data, false, fileId);
+      const docId = await saveDocument(data, false, fileId);
+      if (docId && typeof window !== 'undefined') {
+        sessionStorage.setItem('activePdfDocId', docId);
+      }
+      clearFormSession();
       
       hideLoading();
       setShowValidateOnPdf(aiMode);
@@ -407,7 +444,11 @@ export default function DashboardPage() {
       const response = await fetch(`${API}/convert/word`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ pdf_filename: currentPdfFilename, pdf_file_id: currentPdfFileId }),
+        body: JSON.stringify({
+          pdf_filename: currentPdfFilename,
+          pdf_file_id: currentPdfFileId,
+          doc_id: editingDocId || ''
+        }),
       });
       if (!response.ok) {
         let errMsg = 'Word conversion failed';
@@ -519,6 +560,7 @@ export default function DashboardPage() {
     setAiEmailText('');
     setCurrentStep(0);
     setEditingDocId(null);
+    setIsEditingDocVerified(false);
     setPage('form');
   }, [schemas]);
 
@@ -545,7 +587,12 @@ export default function DashboardPage() {
     setPage('my-documents');
   }, []);
 
-  const openDocInForm = useCallback(async (doc: RecentDoc) => {
+  const openDocInForm = useCallback(async (doc: RecentDoc, bypassCheck = false) => {
+    // Intercept if document has a PDF ready but is pending review/signatures
+    if (!bypassCheck && !doc.is_draft && doc.validation_status === 'pending') {
+      setPendingReviewDoc(doc);
+      return;
+    }
     // Track source page before navigating to form so back button returns correctly
     // Use ref (not state) to avoid stale closure — 'page' is not a dep of this callback
     if (currentPageRef.current === 'my-documents') {
@@ -565,6 +612,7 @@ export default function DashboardPage() {
       setAiMode(full.ai_created || false);
       setAiEmailText(full.source_email || '');
       setEditingDocId(full._id);
+      setIsEditingDocVerified(full.validation_status === 'verified' && !full.is_draft);
       const newStepData: Record<string, unknown> = {};
       const newIrsSelections: Record<string, string> = {};
       for (const [key, value] of Object.entries(data)) {
@@ -627,6 +675,9 @@ export default function DashboardPage() {
         setCurrentPdfFilename(filename);
         setCurrentPdfFileId('');
         setEditingDocId(doc._id);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('activePdfDocId', doc._id);
+        }
         setAiMode(doc.ai_created || false);
         setAiEmailText(doc.source_email || '');
         setCurrentGcsObjectPath(doc.gcs_object_path || '');
@@ -651,6 +702,9 @@ export default function DashboardPage() {
       setCurrentPdfBlobUrl(url);
       setCurrentPdfFilename(fname);
       setEditingDocId(doc._id);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('activePdfDocId', doc._id);
+      }
       setAiMode(doc.ai_created || false);
       setAiEmailText(doc.source_email || '');
       setCurrentGcsObjectPath(doc.gcs_object_path || '');
@@ -664,6 +718,85 @@ export default function DashboardPage() {
       hideLoading(); showToast('❌ Server error');
     }
   }, [currentPdfBlobUrl, showToast]);
+
+  const viewPdfFromId = useCallback(async (docId: string) => {
+    showLoading('Opening PDF...', 'Loading document');
+    try {
+      const response = await fetch(`${API}/api/documents/${docId}`, { headers: authHeaders() });
+      if (!response.ok) {
+        hideLoading();
+        showToast('❌ Document not found');
+        return;
+      }
+      const doc = await response.json();
+      await viewPdfFromDoc(doc);
+    } catch {
+      hideLoading();
+      showToast('❌ Server error loading document');
+    }
+  }, [viewPdfFromDoc, showToast]);
+
+  // ── Auto-reload PDF from sessionStorage on mount ───────────────────
+  useEffect(() => {
+    if (mounted && page === 'pdf' && !currentPdfBlobUrl) {
+      const activePdfId = sessionStorage.getItem('activePdfDocId');
+      if (activePdfId) {
+        viewPdfFromId(activePdfId);
+      } else {
+        setPage('landing');
+      }
+    }
+  }, [mounted, page, currentPdfBlobUrl, viewPdfFromId]);
+
+  // ── Sync Form State to sessionStorage ─────────────────────────────
+  useEffect(() => {
+    if (typeof window !== 'undefined' && page === 'form' && activeSchema && !isFormRestoring) {
+      sessionStorage.setItem('formActiveSchemaId', activeSchema.id);
+      sessionStorage.setItem('formCurrentStep', String(currentStep));
+      sessionStorage.setItem('formStepData', JSON.stringify(stepData));
+      sessionStorage.setItem('formIrsSelections', JSON.stringify(irsSelections));
+      sessionStorage.setItem('formEditingDocId', editingDocId || '');
+      sessionStorage.setItem('formAiMode', String(aiMode));
+      sessionStorage.setItem('formAiEmailText', aiEmailText);
+      sessionStorage.setItem('formIsEditingDocVerified', String(isEditingDocVerified));
+    }
+  }, [page, activeSchema, currentStep, stepData, irsSelections, editingDocId, aiMode, aiEmailText, isEditingDocVerified, isFormRestoring]);
+
+  // ── Auto-reload Form from sessionStorage on mount ───────────────────
+  useEffect(() => {
+    if (mounted && page === 'form' && Object.keys(schemas).length > 0 && isFormRestoring) {
+      const storedSchemaId = sessionStorage.getItem('formActiveSchemaId');
+      if (storedSchemaId && schemas[storedSchemaId]) {
+        setActiveSchema(schemas[storedSchemaId]);
+        
+        const storedStep = sessionStorage.getItem('formCurrentStep');
+        if (storedStep) setCurrentStep(Number(storedStep));
+        
+        const storedData = sessionStorage.getItem('formStepData');
+        if (storedData) {
+          try { setStepData(JSON.parse(storedData)); } catch {}
+        }
+        
+        const storedSelections = sessionStorage.getItem('formIrsSelections');
+        if (storedSelections) {
+          try { setIrsSelections(JSON.parse(storedSelections)); } catch {}
+        }
+        
+        const storedEditingId = sessionStorage.getItem('formEditingDocId');
+        if (storedEditingId) setEditingDocId(storedEditingId);
+        
+        const storedAiMode = sessionStorage.getItem('formAiMode');
+        if (storedAiMode) setAiMode(storedAiMode === 'true');
+        
+        const storedAiEmail = sessionStorage.getItem('formAiEmailText');
+        if (storedAiEmail) setAiEmailText(storedAiEmail);
+
+        const storedIsVerified = sessionStorage.getItem('formIsEditingDocVerified');
+        if (storedIsVerified) setIsEditingDocVerified(storedIsVerified === 'true');
+      }
+      setIsFormRestoring(false);
+    }
+  }, [mounted, page, schemas, isFormRestoring]);
 
   const getSteps = useCallback((): Array<{ id: string; title: string }> => {
     if (!activeSchema) return [];
@@ -705,9 +838,16 @@ export default function DashboardPage() {
   }, [currentStep]);
 
   const handleNext = useCallback(() => {
-    if (currentStep < steps.length - 1) setCurrentStep(c => c + 1);
-    else generatePDF();
-  }, [currentStep, steps.length, generatePDF]);
+    if (currentStep < steps.length - 1) {
+      setCurrentStep(c => c + 1);
+    } else {
+      if (isEditingDocVerified && editingDocId) {
+        viewPdfFromId(editingDocId);
+      } else {
+        generatePDF();
+      }
+    }
+  }, [currentStep, steps.length, generatePDF, isEditingDocVerified, editingDocId, viewPdfFromId]);
 
   // ── Render Helpers ────────────────────────
   const renderFormContent = () => {
@@ -738,10 +878,10 @@ export default function DashboardPage() {
           allFields.find(f => f.key === key)
         ).filter(Boolean) as SchemaField[];
         
-        return <FieldsStep title={step.title} fields={resolvedFields} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} />;
+        return <FieldsStep title={step.title} fields={resolvedFields} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} readOnly={isEditingDocVerified} />;
       }
       
-      return <SelectionStep stepDef={step} selections={irsSelections} onSelect={(k, v) => setIrsSelections(p => ({ ...p, [k]: v }))} />;
+      return <SelectionStep stepDef={step} selections={irsSelections} onSelect={(k, v) => setIrsSelections(p => ({ ...p, [k]: v }))} readOnly={isEditingDocVerified} />;
     }
 
     // 2. Handle Sections (after wizard steps are complete)
@@ -771,15 +911,15 @@ export default function DashboardPage() {
         return true;
       });
       const section = sectionEntries[sectionIdx]?.[1] as SchemaSection;
-      return section ? <SectionStep section={section} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} /> : null;
+      return section ? <SectionStep section={section} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} readOnly={isEditingDocVerified} /> : null;
     }
     
     const sec = activeSchema.sections[currentStep];
-    return sec ? <FieldsStep title={sec.title} fields={sec.fields || []} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} /> : null;
+    return sec ? <FieldsStep title={sec.title} fields={sec.fields || []} stepData={stepData} onUpdate={(k, v) => setStepData(p => ({ ...p, [k]: v }))} aiMode={aiMode} allData={{ ...irsSelections, ...stepData }} onFieldFocus={setActiveFieldKey} activeFieldKey={activeFieldKey} readOnly={isEditingDocVerified} /> : null;
   };
 
   // ── ChatSidebar helpers ─────────────────────
-  const isManualForm = page === 'form' && !aiMode && !!activeSchema;
+  const isManualForm = page === 'form' && !aiMode && !!activeSchema && !isEditingDocVerified;
 
   // Compute active field label for sidebar display
   const getActiveFieldLabel = (): string => {
@@ -1047,18 +1187,33 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2 shrink-0">
               {page === 'form' && (
                 <>
-                  <button
-                    onClick={() => saveDocument(assembleJSON(), true)}
-                    className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 text-sm font-bold font-inter hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
-                  >
-                    Save Draft
-                  </button>
-                  <button
-                    onClick={generatePDF}
-                    className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold font-inter hover:bg-indigo-700 transition-colors shadow-sm"
-                  >
-                    Generate PDF
-                  </button>
+                  {isEditingDocVerified ? (
+                    <button
+                      onClick={() => editingDocId && viewPdfFromId(editingDocId)}
+                      className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold font-inter hover:bg-indigo-700 transition-colors shadow-sm flex items-center gap-1.5"
+                    >
+                      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="stroke-[2.5]">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      View Signed PDF
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => saveDocument(assembleJSON(), true)}
+                        className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 text-sm font-bold font-inter hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
+                      >
+                        Save Draft
+                      </button>
+                      <button
+                        onClick={generatePDF}
+                        className="px-5 py-2 rounded-xl bg-indigo-600 text-white text-sm font-bold font-inter hover:bg-indigo-700 transition-colors shadow-sm"
+                      >
+                        Generate PDF
+                      </button>
+                    </>
+                  )}
                 </>
               )}
               {page === 'pdf' && (
@@ -1144,21 +1299,20 @@ export default function DashboardPage() {
               <h1 className="hidden lg:block text-xl sm:text-2xl font-bold text-slate-900 font-inter tracking-tight mb-2 lg:mb-6">
                 Analytics
               </h1>
-              <div className="w-full max-w-[1440px] mx-auto grid grid-cols-2 lg:grid-cols-2 gap-3 sm:gap-6 lg:gap-8 animate-fade-in px-1 sm:px-0">
-              {/* Blue card: full width on mobile, 1 col on desktop (with teal stacked below) */}
-              <div className="col-span-2 lg:col-span-1">
-                <DocumentOverviewCards documents={recentDocs} onLoad={openDocInForm} hideTimeSavedMobile />
-              </div>
-              {/* Teal Time Saved: only on mobile, sits next to MoneySavedCard */}
-              <div className="lg:hidden">
+              {/* Three KPI cards in one line on desktop */}
+              <div className="w-full max-w-[1440px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6 lg:gap-8 mb-6 sm:mb-8 animate-fade-in px-1 sm:px-0">
+                <StatusOverviewCard documents={recentDocs} />
                 <TimeSavedCard documents={recentDocs} />
+                <MoneySavedCard documents={recentDocs} />
               </div>
-              <MoneySavedCard documents={recentDocs} />
-              <ActivityChart documents={recentDocs} />
-              <DocumentTypeBreakdown documents={recentDocs} />
-              <RecentActivitySection documents={recentDocs} onLoad={openDocInForm} />
-              <ExtractionEfficiencyChart documents={recentDocs} />
-            </div>
+
+              {/* Analytics widgets and charts grid */}
+              <div className="w-full max-w-[1440px] mx-auto grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6 lg:gap-8 animate-fade-in px-1 sm:px-0">
+                <ActivityChart documents={recentDocs} />
+                <DocumentTypeBreakdown documents={recentDocs} />
+                <RecentActivitySection documents={recentDocs} onLoad={openDocInForm} />
+                <ExtractionEfficiencyChart documents={recentDocs} />
+              </div>
             </>
           )}
 
@@ -1247,6 +1401,34 @@ export default function DashboardPage() {
                   <div>
                     <p style={{ fontSize: '13px', fontWeight: 700, color: '#3730a3', fontFamily: "'DM Sans', system-ui, sans-serif" }}>AI Intelligent Fill Active</p>
                     <p style={{ fontSize: '10px', color: '#6366f1', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', fontFamily: "'DM Sans', system-ui, sans-serif" }}>Reviewing fields extracted from source email</p>
+                  </div>
+                </div>
+              )}
+
+              {isEditingDocVerified && (
+                <div
+                  className="mb-7 flex items-center gap-4 animate-in fade-in slide-in-from-top-2 duration-700"
+                  style={{
+                    padding: '14px 20px',
+                    background: 'linear-gradient(135deg, rgba(16,185,129,0.07) 0%, rgba(5,150,105,0.05) 100%)',
+                    border: '1px solid rgba(16,185,129,0.18)',
+                    borderLeft: '3.5px solid #10b981',
+                    borderRadius: '16px',
+                  }}
+                >
+                  <div
+                    className="w-9 h-9 text-white rounded-xl flex items-center justify-center text-base shrink-0 animate-pulse"
+                    style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 4px 12px rgba(16,185,129,0.28)' }}
+                  >
+                    <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="stroke-[2.5]">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p style={{ fontSize: '13px', fontWeight: 700, color: '#065f46', fontFamily: "'DM Sans', system-ui, sans-serif" }}>Verified Document (Read-Only Mode)</p>
+                    <p style={{ fontSize: '11px', color: '#047857', fontWeight: 600, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+                      This trade confirmation has been finalized and digitally signed. Modifying fields is disabled.
+                    </p>
                   </div>
                 </div>
               )}
@@ -1367,7 +1549,9 @@ export default function DashboardPage() {
                     onMouseEnter={(e) => e.currentTarget.style.background = '#4338ca'}
                     onMouseLeave={(e) => e.currentTarget.style.background = '#4f46e5'}
                   >
-                    {currentStep === steps.length - 1 ? 'Generate Confirmation' : 'Continue'}
+                    {currentStep === steps.length - 1 
+                      ? (isEditingDocVerified ? 'View Signed PDF' : 'Generate Confirmation') 
+                      : 'Continue'}
                   </button>
                 </div>
               </div>
@@ -1532,6 +1716,92 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Pending Review Options Modal (Dual Action Approach C) */}
+      {pendingReviewDoc && (
+        <div className="fixed inset-0 z-140 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="absolute inset-0" onClick={() => setPendingReviewDoc(null)} />
+          <div className="bg-white rounded-t-[32px] sm:rounded-[32px] w-full max-w-lg relative shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300 border border-white/10">
+            {/* Header */}
+            <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-slate-50/50">
+              <div>
+                <span className="px-2.5 py-1 rounded-full text-[9px] font-bold bg-amber-50 text-amber-600 uppercase tracking-wider mb-2 inline-block">
+                  Pending Review
+                </span>
+                <h3 className="text-xl font-bold text-slate-800">Verify or Edit Trade</h3>
+                <p className="text-xs text-slate-500 font-medium mt-1">
+                  A PDF draft is already generated for this confirmation.
+                </p>
+              </div>
+              <button
+                onClick={() => setPendingReviewDoc(null)}
+                className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors"
+              >
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content Actions */}
+            <div className="p-8 flex flex-col gap-4">
+              {/* Option 1: View / Verify / Sign (Primary) */}
+              <button
+                onClick={() => {
+                  const doc = pendingReviewDoc;
+                  setPendingReviewDoc(null);
+                  viewPdfFromDoc(doc);
+                }}
+                className="flex items-center gap-5 p-6 rounded-2xl border-2 border-transparent bg-indigo-50/70 hover:border-indigo-200 hover:bg-indigo-50 transition-all group text-left"
+              >
+                <div className="w-14 h-14 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform shrink-0">
+                  <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 text-[16px] mb-1">Verify & Sign PDF</p>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Open PDF directly to run validation checks and apply digital signatures. (No API Delay)
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Edit Form (Secondary) */}
+              <button
+                onClick={() => {
+                  const doc = pendingReviewDoc;
+                  setPendingReviewDoc(null);
+                  openDocInForm(doc, true);
+                }}
+                className="flex items-center gap-5 p-6 rounded-2xl border-2 border-slate-100 bg-white hover:border-amber-200 hover:bg-amber-50/30 transition-all group text-left"
+              >
+                <div className="w-14 h-14 rounded-xl bg-amber-500 flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform shrink-0">
+                  <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 text-[16px] mb-1">Edit Form Fields</p>
+                  <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                    Modify trade parameters in step-by-step form. Will regenerate PDF upon submission.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 bg-slate-50/50 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setPendingReviewDoc(null)}
+                className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Document Type Selection Modal */}
       {modal === 'type' && (
         <div className="fixed inset-0 z-130 flex items-end sm:items-center justify-center">
@@ -1574,8 +1844,8 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      {/* Chat Copilot — hidden on manual form pages (ChatSidebar replaces it) */}
-      {!isManualForm && (
+      {/* Chat Copilot — hidden on manual form pages and workflow builder */}
+      {!isManualForm && page !== 'workflow-builder' && (
       <div className="fixed bottom-4 right-4 z-140 sm:bottom-6 sm:right-6 md:bottom-8 md:right-8">
         <ChatCopilot
           docType={page === 'form' ? activeSchema?.id : null}

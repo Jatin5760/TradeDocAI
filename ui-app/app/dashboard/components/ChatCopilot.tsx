@@ -237,11 +237,12 @@ export default function ChatCopilot({ onNavigate, docType, schema, currentData }
     recognition.start();
   };
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, isTyping]);
+  // Disable auto-scroll to bottom of chat container
+  // useEffect(() => {
+  //   if (scrollRef.current) {
+  //     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  //   }
+  // }, [messages, isTyping]);
 
   const handleClearChat = () => {
     stopSpeaking();

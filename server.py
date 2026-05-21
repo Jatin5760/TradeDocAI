@@ -1424,30 +1424,41 @@ def api_update_document(doc_id):
             final_doc.update(update_fields)
             final_doc["is_draft"] = True
             
-            # Clear stale PDF references — old PDF is now outdated since form data changed
+            # Clear stale PDF and signature references — old PDF/signatures are now outdated
             final_doc.pop("pdf_file_id", None)
             final_doc.pop("gcs_object_path", None)
+            final_doc.pop("signed", None)
+            final_doc.pop("signed_at", None)
+            final_doc["validation_status"] = "pending"
             
             # Move to drafts
             db.drafts.insert_one(final_doc)
             db.documents.delete_one({"_id": oid})
-            print(f"  📝 Verified trade demoted to Draft: {doc_id} (form edited, PDF references cleared)")
+            print(f"  📝 Verified trade demoted to Draft: {doc_id} (form edited, PDF references and signatures cleared)")
             return jsonify(_obj_id_to_str(final_doc))
         
         # Normal update within same collection
         current_coll = db.documents if is_in_final else db.drafts
+        
+        # Guard: Prevent editing verified/signed documents directly in the final collection
+        if is_in_final:
+            existing = db.documents.find_one({"_id": oid, "user_id": g.current_user_id})
+            if existing and existing.get("signed"):
+                return jsonify({"error": "Cannot modify a signed and verified document. Please demote it to draft first."}), 400
         update_fields["is_draft"] = bool(new_is_draft) if new_is_draft is not None else (not is_in_final)  # type: ignore[assignment]
 
-        # If missing GCS path, upload PDF to cloud storage (for both drafts and documents)
+        # Upload PDF to cloud storage if missing OR if a new pdf_file_id is provided
         doc = current_coll.find_one({"_id": oid, "user_id": g.current_user_id})
-        if doc and not doc.get("gcs_object_path"):
+        if doc:
             pdf_id = body.get("pdf_file_id", "") or update_fields.get("pdf_file_id", "")
-            if pdf_id and ":" in pdf_id:
-                pdf_path, _ = _resolve_generated_pdf({"pdf_file_id": pdf_id})
-                if pdf_path and os.path.exists(pdf_path):
-                    gcs_path = _upload_to_gcs(pdf_path, g.current_user_id, doc.get("doc_type", ""))
-                    if gcs_path:
-                        update_fields["gcs_object_path"] = gcs_path
+            is_new_pdf = pdf_id and (pdf_id != doc.get("pdf_file_id"))
+            if not doc.get("gcs_object_path") or is_new_pdf:
+                if pdf_id and ":" in pdf_id:
+                    pdf_path, _ = _resolve_generated_pdf({"pdf_file_id": pdf_id})
+                    if pdf_path and os.path.exists(pdf_path):
+                        gcs_path = _upload_to_gcs(pdf_path, g.current_user_id, doc.get("doc_type", ""))
+                        if gcs_path:
+                            update_fields["gcs_object_path"] = gcs_path
 
         result = current_coll.update_one(
             {"_id": oid, "user_id": g.current_user_id},
@@ -1549,7 +1560,7 @@ def api_serve_document_pdf(doc_id):
         return jsonify({"error": str(e)}), 500
 
 
-def _stamp_signature_to_pdf(input_pdf_path, output_pdf_path, signature_base64_str, user_name):
+def _stamp_signature_to_pdf(input_pdf_path, output_pdf_path, signature_base64_str, user_name, audit_metadata=None):
     import io
     import base64
     from datetime import datetime, timezone, timedelta
@@ -1580,7 +1591,7 @@ def _stamp_signature_to_pdf(input_pdf_path, output_pdf_path, signature_base64_st
     sig_w = 120
     sig_h = 45
     sig_x = page_width - sig_w - 60
-    sig_y = 65
+    sig_y = 70  # Raised slightly to 70 for audit metadata spacing
 
     # Generate signature overlay PDF page using reportlab
     packet = io.BytesIO()
@@ -1600,6 +1611,31 @@ def _stamp_signature_to_pdf(input_pdf_path, output_pdf_path, signature_base64_st
     ist_tz = timezone(timedelta(hours=5, minutes=30))
     now_ist = datetime.now(ist_tz)
     can.drawString(sig_x, sig_y - 12, now_ist.strftime("%d-%b-%Y %I:%M %p IST"))
+
+    # Audit Trail details
+    if audit_metadata:
+        can.setFont("Helvetica", 6.5)
+        can.setFillColorRGB(0.55, 0.55, 0.55)  # Light Gray
+        y_offset = sig_y - 20
+        if audit_metadata.get("email"):
+            can.drawString(sig_x, y_offset, f"Email: {audit_metadata['email']}")
+            y_offset -= 8
+        if audit_metadata.get("ip"):
+            can.drawString(sig_x, y_offset, f"IP: {audit_metadata['ip']}")
+            y_offset -= 8
+        if audit_metadata.get("user_agent"):
+            ua = audit_metadata['user_agent']
+            if "Chrome" in ua and "Safari" in ua:
+                simplified_ua = "Chrome/Safari Browser"
+            elif "Firefox" in ua:
+                simplified_ua = "Firefox Browser"
+            elif "Safari" in ua:
+                simplified_ua = "Safari Browser"
+            elif "Edge" in ua:
+                simplified_ua = "Edge Browser"
+            else:
+                simplified_ua = ua[:35] + "..." if len(ua) > 35 else ua
+            can.drawString(sig_x, y_offset, f"Browser: {simplified_ua}")
 
     can.save()
     packet.seek(0)
@@ -1670,9 +1706,22 @@ def api_sign_document(doc_id):
 
         user = db.users.find_one({"_id": ObjectId(g.current_user_id)})
         user_name = user.get("name", "Authorized Signatory") if user else "Authorized Signatory"
+        user_email = user.get("email", "") if user else ""
+
+        # Retrieve request metadata for audit trail
+        ip_addr = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_addr and ',' in ip_addr:
+            ip_addr = ip_addr.split(',')[0].strip()
+        user_agent = request.headers.get('User-Agent', '')
+
+        audit_metadata = {
+            "email": user_email,
+            "ip": ip_addr,
+            "user_agent": user_agent
+        }
 
         temp_signed_path = pdf_path + ".signed"
-        _stamp_signature_to_pdf(pdf_path, temp_signed_path, signature_data, user_name)
+        _stamp_signature_to_pdf(pdf_path, temp_signed_path, signature_data, user_name, audit_metadata=audit_metadata)
 
         # Replace original cached file
         shutil.move(temp_signed_path, pdf_path)
@@ -1876,9 +1925,37 @@ def api_convert_word():
         body = _json_body()
         pdf_path, pdf_filename = _resolve_generated_pdf(body)
 
+        # Fallback to GCS to guarantee we get the latest (signed) PDF
+        doc_id = body.get("doc_id")
+        if doc_id:
+            try:
+                db = get_db()
+                doc = db.documents.find_one({"_id": ObjectId(doc_id), "user_id": g.current_user_id})
+                if doc:
+                    gcs_path = doc.get("gcs_object_path")
+                    if gcs_path:
+                        pdf_bytes = _download_from_gcs(gcs_path)
+                        if pdf_bytes:
+                            if not pdf_path:
+                                file_id = doc.get("pdf_file_id", "")
+                                if file_id and ":" in file_id:
+                                    job_id, filename = file_id.split(":", 1)
+                                    job_id = secure_filename(job_id)
+                                    job_dir = os.path.join(TEMP_PDF_DIR, g.current_user_id, job_id)
+                                else:
+                                    job_dir = os.path.join(TEMP_PDF_DIR, g.current_user_id, "temp_downloads")
+                                os.makedirs(job_dir, exist_ok=True)
+                                pdf_filename = doc.get("name", "document") + ".pdf"
+                                pdf_path = os.path.join(job_dir, pdf_filename)
+
+                            with open(pdf_path, "wb") as f:
+                                f.write(pdf_bytes)
+            except Exception as e:
+                print(f"Error fetching PDF from GCS for Word conversion: {e}")
+
         if not pdf_filename:
             return jsonify({"error": "No PDF filename provided"}), 400
-        if not pdf_path:
+        if not pdf_path or not os.path.exists(pdf_path):
             return jsonify({"error": f"PDF not found: {pdf_filename}"}), 404
 
         docx_filename = os.path.splitext(pdf_filename)[0] + ".docx"

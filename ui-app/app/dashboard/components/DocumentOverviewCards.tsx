@@ -15,14 +15,15 @@ function useDocStats(documents: RecentDoc[]) {
   const completedDocs = documents.filter(d => !d.is_draft && d.validation_status !== 'pending').length;
   const pendingValidationDocs = documents.filter(d => !d.is_draft && d.validation_status === 'pending').length;
   const inProgressDocs = documents.filter(d => d.is_draft === true).length;
+  const needsReviewDocs = pendingValidationDocs + inProgressDocs; // Combine pending and drafts
   const totalMinutesSaved = totalDocs * 10;
   const totalHoursSaved = (totalMinutesSaved / 60).toFixed(1);
-  return { totalDocs, completedDocs, pendingValidationDocs, inProgressDocs, totalHoursSaved };
+  return { totalDocs, completedDocs, needsReviewDocs, totalHoursSaved };
 }
 
 // Blue Status Overview Card
 export function StatusOverviewCard({ documents }: { documents: RecentDoc[] }) {
-  const { totalDocs, completedDocs, pendingValidationDocs, inProgressDocs } = useDocStats(documents);
+  const { totalDocs, completedDocs, needsReviewDocs } = useDocStats(documents);
 
   return (
     <div className="flex flex-col gap-5 w-full">
@@ -61,7 +62,7 @@ export function StatusOverviewCard({ documents }: { documents: RecentDoc[] }) {
 
             <div className="h-20 w-px bg-linear-to-b from-transparent via-white/10 to-transparent mx-1" />
 
-            <div className="flex flex-col gap-2 pr-2 flex-1 max-w-[180px]">
+            <div className="flex flex-col gap-3 pr-2 flex-1 max-w-[180px]">
               <div className="flex flex-col items-start bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 w-full transition-all hover:bg-white/10">
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
@@ -73,26 +74,9 @@ export function StatusOverviewCard({ documents }: { documents: RecentDoc[] }) {
                   <p className="text-xl font-black text-white leading-none">
                     {completedDocs}
                   </p>
-                  <span className="text-[8px] font-bold text-white/20 uppercase italic">Docs</span>
+                  <span className="text-[8px] font-bold text-emerald-400 uppercase italic">Docs</span>
                 </div>
               </div>
-
-              {pendingValidationDocs > 0 && (
-                <div className="flex flex-col items-start bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 w-full transition-all hover:bg-white/10">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-1.5 h-1.5 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
-                    <p className="text-[9px] font-bold uppercase tracking-wider text-violet-400">
-                      Needs Review
-                    </p>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-xl font-black text-white leading-none">
-                      {pendingValidationDocs}
-                    </p>
-                    <span className="text-[8px] font-bold text-white/20 uppercase italic">Pending</span>
-                  </div>
-                </div>
-              )}
 
               <div className="flex flex-col items-start bg-white/5 backdrop-blur-md rounded-2xl p-2 border border-white/10 w-full transition-all hover:bg-white/10">
                 <div className="flex items-center gap-2 mb-1">
@@ -103,9 +87,9 @@ export function StatusOverviewCard({ documents }: { documents: RecentDoc[] }) {
                 </div>
                 <div className="flex items-baseline gap-2">
                   <p className="text-xl font-black text-white leading-none">
-                    {inProgressDocs}
+                    {needsReviewDocs}
                   </p>
-                  <span className="text-[8px] font-bold text-white/20 uppercase italic">Active</span>
+                  <span className="text-[8px] font-bold text-orange-400 uppercase italic">Active</span>
                 </div>
               </div>
             </div>
