@@ -643,7 +643,7 @@ export default function DashboardPage() {
     }
     showLoading('Opening PDF...', 'Loading document');
     try {
-      const r = await fetch(`${API}/api/documents/${doc._id}/pdf`, { headers: authHeaders() });
+      const r = await fetch(`${API}/api/documents/${doc._id}/pdf?t=${Date.now()}`, { headers: authHeaders() });
       if (!r.ok) {
         let errMsg = 'PDF not found';
         try { const d = await r.json(); errMsg = d.error || errMsg; } catch {}
@@ -761,6 +761,19 @@ export default function DashboardPage() {
       sessionStorage.setItem('formIsEditingDocVerified', String(isEditingDocVerified));
     }
   }, [page, activeSchema, currentStep, stepData, irsSelections, editingDocId, aiMode, aiEmailText, isEditingDocVerified, isFormRestoring]);
+
+  // Clear AI email text and mode when entering the AI Extract page to ensure a clean slate
+  useEffect(() => {
+    if (page === 'ai') {
+      setAiEmailText('');
+      setAiMode(false);
+      setEditingDocId(null);
+      setIsEditingDocVerified(false);
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('formAiEmailText');
+      }
+    }
+  }, [page]);
 
   // ── Auto-reload Form from sessionStorage on mount ───────────────────
   useEffect(() => {
@@ -1146,6 +1159,7 @@ export default function DashboardPage() {
         isMobileOpen={sidebarOpen}
         onCloseMobile={() => setSidebarOpen(false)}
         hidden={isManualForm || page === 'workflow-builder'}
+        pendingApprovalsCount={recentDocs.filter(d => !d.is_draft && d.client_signed && !d.released).length}
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative">
@@ -1332,7 +1346,7 @@ export default function DashboardPage() {
               onDelete={handleDeleteDocument}
               onFetchPdfBlob={async (docId: string) => {
                 try {
-                  const r = await fetch(`${API}/api/documents/${docId}/pdf`, { headers: authHeaders() });
+                  const r = await fetch(`${API}/api/documents/${docId}/pdf?t=${Date.now()}`, { headers: authHeaders() });
                   if (!r.ok) return null;
                   const contentType = r.headers.get('Content-Type') || '';
                   // GCS signed URL response
@@ -1575,6 +1589,8 @@ export default function DashboardPage() {
               generatingValidation={loading}
               onSigned={fetchRecentDocs}
               initialIsSigned={recentDocs.find(d => d._id === editingDocId)?.signed || false}
+              initialIsClientSigned={recentDocs.find(d => d._id === editingDocId)?.client_signed || false}
+              initialIsReleased={recentDocs.find(d => d._id === editingDocId)?.released || false}
             />
           )}
         </div>

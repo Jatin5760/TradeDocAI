@@ -315,7 +315,13 @@ export default function MyDocumentsUI({
                           ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]'
                           : (!doc.is_draft && doc.validation_status === 'pending')
                             ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)]'
-                            : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                            : doc.client_signed && doc.released
+                              ? 'bg-emerald-600 shadow-[0_0_8px_rgba(5,150,105,0.5)]'
+                              : doc.client_signed
+                                ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
+                                : doc.signed
+                                  ? 'bg-indigo-500 shadow-[0_0_8px_rgba(79,70,229,0.5)]'
+                                  : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
                       }`}
                     />
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -323,7 +329,13 @@ export default function MyDocumentsUI({
                         ? 'In Progress'
                         : (!doc.is_draft && doc.validation_status === 'pending')
                           ? 'Pending Review'
-                          : 'Verified'}
+                          : doc.client_signed && doc.released
+                            ? 'Fully Executed'
+                            : doc.client_signed
+                              ? 'Signed – Pending Verification'
+                              : doc.signed
+                                ? 'Signed (Pending Client)'
+                                : 'Verified'}
                     </span>
                   </div>
                   <div className="text-right">

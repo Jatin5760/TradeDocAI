@@ -762,9 +762,10 @@ def _file_id(job_id: str, filename: str) -> str:
     return f"{job_id}:{filename}"
 
 
-def _resolve_generated_pdf(body: dict) -> tuple[str | None, str | None]:
+def _resolve_generated_pdf(body: dict, user_id: str | None = None) -> tuple[str | None, str | None]:
     """Resolve a generated PDF by job-scoped file id, with legacy filename fallback."""
-    user_id = _safe_user_id()
+    if not user_id:
+        user_id = _safe_user_id()
     file_id = body.get("pdf_file_id") or body.get("file_id") or ""
     if file_id and ":" in file_id:
         job_id, filename = file_id.split(":", 1)
@@ -1542,6 +1543,7 @@ def api_serve_document_pdf(doc_id):
                     headers={
                         "Content-Disposition": f"inline; filename={gcs_filename}",
                         "X-TradeDoc-File-Id": file_id,
+                        "Cache-Control": "no-store, no-cache, must-revalidate",
                     },
                 )
 
@@ -1560,7 +1562,183 @@ def api_serve_document_pdf(doc_id):
         return jsonify({"error": str(e)}), 500
 
 
-def _stamp_signature_to_pdf(input_pdf_path, output_pdf_path, signature_base64_str, user_name, audit_metadata=None):
+def _write_certificate_canvas(output_stream, page_width, page_height, doc_id, doc_type, summary, sha256_hash, party_a_name, party_a_metadata, party_b_name, party_b_metadata):
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.colors import HexColor
+    
+    can = canvas.Canvas(output_stream, pagesize=(page_width, page_height))
+    
+    # Simple plain black text
+    can.setFillColor(HexColor("#000000"))
+    
+    y = page_height - 60
+    
+    can.setFont("Courier-Bold", 12)
+    can.drawCentredString(page_width / 2, y, "TRADEDOC AI - AUDIT TRAIL CERTIFICATE")
+    y -= 15
+    can.setFont("Courier", 10)
+    can.drawCentredString(page_width / 2, y, "============================================================")
+    y -= 25
+    
+    # Document details
+    can.setFont("Courier-Bold", 10)
+    can.drawString(50, y, "DOCUMENT DETAILS")
+    y -= 15
+    can.setFont("Courier", 10)
+    can.drawString(50, y, "------------------------------------------------------------")
+    y -= 20
+    
+    def draw_row(label, val, y_pos):
+        can.setFont("Courier-Bold", 9)
+        can.drawString(50, y_pos, f"{label:<16}:")
+        can.setFont("Courier", 9)
+        can.drawString(180, y_pos, str(val))
+        
+    draw_row("Document ID", doc_id, y)
+    y -= 18
+    draw_row("Document Type", str(doc_type).upper().replace('_', ' '), y)
+    y -= 18
+    draw_row("Description", summary, y)
+    y -= 18
+    draw_row("SHA-256 Hash", sha256_hash, y)
+    y -= 25
+    
+    # Party A Details
+    can.setFont("Courier-Bold", 10)
+    status_a = "SIGNED & VERIFIED"
+    can.drawString(50, y, f"PARTY A (INITIATOR) - {status_a}")
+    y -= 15
+    can.setFont("Courier", 10)
+    can.drawString(50, y, "------------------------------------------------------------")
+    y -= 20
+    
+    email_a = party_a_metadata.get("email", "") if party_a_metadata else ""
+    time_a = party_a_metadata.get("time", "") if party_a_metadata else ""
+    ip_a = party_a_metadata.get("ip", "") if party_a_metadata else ""
+    ua_a = party_a_metadata.get("user_agent", "") if party_a_metadata else ""
+    
+    if len(ua_a) > 55:
+        ua_a_lines = [ua_a[:55], ua_a[55:110]]
+    else:
+        ua_a_lines = [ua_a]
+        
+    draw_row("Signatory Name", party_a_name or "Initiator Rep", y)
+    y -= 18
+    draw_row("Email", email_a, y)
+    y -= 18
+    draw_row("Signing Time", time_a, y)
+    y -= 18
+    draw_row("IP Address", ip_a, y)
+    y -= 18
+    draw_row("User Agent", ua_a_lines[0], y)
+    if len(ua_a_lines) > 1:
+        y -= 15
+        can.drawString(180, y, ua_a_lines[1])
+    y -= 30
+    
+    # Party B Details
+    can.setFont("Courier-Bold", 10)
+    is_signed_b = party_b_metadata is not None
+    status_b = "SIGNED & VERIFIED" if is_signed_b else "PENDING SIGNATURE"
+    can.drawString(50, y, f"PARTY B (CLIENT) - {status_b}")
+    y -= 15
+    can.setFont("Courier", 10)
+    can.drawString(50, y, "------------------------------------------------------------")
+    y -= 20
+    
+    email_b = party_b_metadata.get("email", "") if is_signed_b and party_b_metadata else ""
+    time_b = party_b_metadata.get("time", "") if is_signed_b and party_b_metadata else ""
+    ip_b = party_b_metadata.get("ip", "") if is_signed_b and party_b_metadata else ""
+    ua_b = party_b_metadata.get("user_agent", "") if is_signed_b and party_b_metadata else ""
+    
+    if len(ua_b) > 55:
+        ua_b_lines = [ua_b[:55], ua_b[55:110]]
+    else:
+        ua_b_lines = [ua_b]
+        
+    draw_row("Signatory Name", party_b_name or ("Client Partner" if is_signed_b else "—"), y)
+    y -= 18
+    draw_row("Email", email_b or ("—" if not is_signed_b else email_b), y)
+    y -= 18
+    draw_row("Signing Time", time_b or "—", y)
+    y -= 18
+    draw_row("IP Address", ip_b or "—", y)
+    y -= 18
+    draw_row("User Agent", ua_b_lines[0] if is_signed_b else "—", y)
+    if is_signed_b and len(ua_b_lines) > 1:
+        y -= 15
+        can.drawString(180, y, ua_b_lines[1])
+    y -= 30
+    
+    # Security/Footer
+    can.setFont("Courier", 10)
+    can.drawString(50, y, "============================================================")
+    y -= 20
+    can.setFont("Courier-Bold", 9)
+    can.drawString(50, y, "SECURITY VERIFICATION:")
+    y -= 15
+    can.setFont("Courier", 8.5)
+    can.drawString(50, y, "This document is secure and tamper-evident.")
+    y -= 12
+    can.drawString(50, y, "Any modification to its content or signature records will")
+    y -= 12
+    can.drawString(50, y, "invalidate the cryptographic SHA-256 checksum printed above.")
+    y -= 25
+    can.setFont("Courier-Bold", 10)
+    can.drawString(50, y, "STATUS: SECURE SIGNED")
+    
+    can.save()
+
+
+def _append_or_update_audit_trail_page(pdf_path, doc_id, doc_type, summary, party_a_name, party_a_metadata, party_b_name=None, party_b_metadata=None):
+    import io
+    import hashlib
+    from pypdf import PdfReader, PdfWriter
+    
+    reader = PdfReader(pdf_path)
+    num_pages = len(reader.pages)
+    
+    writer = PdfWriter()
+    
+    has_audit_page = False
+    # If party_b_metadata is provided, it means we are updating the existing audit page
+    if party_b_metadata is not None and num_pages > 1:
+        has_audit_page = True
+        
+    pages_to_hash = num_pages - 1 if has_audit_page else num_pages
+    
+    # Save main pages to a temp buffer to calculate hash
+    hash_writer = PdfWriter()
+    for i in range(pages_to_hash):
+        hash_writer.add_page(reader.pages[i])
+        
+    temp_buffer = io.BytesIO()
+    hash_writer.write(temp_buffer)
+    temp_bytes = temp_buffer.getvalue()
+    sha256_hash = hashlib.sha256(temp_bytes).hexdigest()
+    
+    # Get last page dimensions for the audit page size
+    last_page = reader.pages[pages_to_hash - 1]
+    page_width = float(last_page.mediabox.width)
+    page_height = float(last_page.mediabox.height)
+    
+    # Generate the certificate page PDF
+    cert_buffer = io.BytesIO()
+    _write_certificate_canvas(cert_buffer, page_width, page_height, doc_id, doc_type, summary, sha256_hash, party_a_name, party_a_metadata, party_b_name, party_b_metadata)
+    
+    cert_reader = PdfReader(cert_buffer)
+    cert_page = cert_reader.pages[0]
+    
+    # Write everything to the final PDF writer
+    for i in range(pages_to_hash):
+        writer.add_page(reader.pages[i])
+    writer.add_page(cert_page)
+    
+    with open(pdf_path, "wb") as f:
+        writer.write(f)
+
+
+def _stamp_signature_to_pdf(input_pdf_path, output_pdf_path, signature_base64_str, user_name, audit_metadata=None, is_party_b=False):
     import io
     import base64
     from datetime import datetime, timezone, timedelta
@@ -1582,40 +1760,43 @@ def _stamp_signature_to_pdf(input_pdf_path, output_pdf_path, signature_base64_st
     if num_pages == 0:
         raise ValueError("Cannot sign an empty PDF")
 
-    last_page_idx = num_pages - 1
+    # If Party B is signing, the last page is the Audit page, so stamp the second-to-last page.
+    last_page_idx = num_pages - 2 if is_party_b else num_pages - 1
     last_page = reader.pages[last_page_idx]
     page_width = float(last_page.mediabox.width)
     page_height = float(last_page.mediabox.height)
 
-    # Signature box coordinates (bottom right signature area)
     sig_w = 120
     sig_h = 45
-    sig_x = page_width - sig_w - 60
-    sig_y = 70  # Raised slightly to 70 for audit metadata spacing
+    if is_party_b:
+        # Right side for Party B
+        sig_x = page_width - sig_w - 60
+    else:
+        # Left side for Party A
+        sig_x = 60
+    sig_y = 70
 
     # Generate signature overlay PDF page using reportlab
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=(page_width, page_height))
-    # Draw signature image on the canvas using ImageReader wrapper
     img_reader = ImageReader(img)
     can.drawImage(img_reader, sig_x, sig_y, sig_w, sig_h, mask='auto')
 
     # Draw metadata labels
     can.setFont("Helvetica-Bold", 8)
-    can.setFillColorRGB(0.1, 0.1, 0.4)  # Dark Blue
+    can.setFillColorRGB(0.1, 0.1, 0.4)
     can.drawString(sig_x, sig_y + sig_h + 5, "Digitally Signed By:")
 
     can.setFont("Helvetica", 8)
-    can.setFillColorRGB(0.3, 0.3, 0.3)  # Slate Gray
+    can.setFillColorRGB(0.3, 0.3, 0.3)
     can.drawString(sig_x, sig_y + sig_h - 5, user_name)
     ist_tz = timezone(timedelta(hours=5, minutes=30))
     now_ist = datetime.now(ist_tz)
     can.drawString(sig_x, sig_y - 12, now_ist.strftime("%d-%b-%Y %I:%M %p IST"))
 
-    # Audit Trail details
     if audit_metadata:
         can.setFont("Helvetica", 6.5)
-        can.setFillColorRGB(0.55, 0.55, 0.55)  # Light Gray
+        can.setFillColorRGB(0.55, 0.55, 0.55)
         y_offset = sig_y - 20
         if audit_metadata.get("email"):
             can.drawString(sig_x, y_offset, f"Email: {audit_metadata['email']}")
@@ -1721,10 +1902,33 @@ def api_sign_document(doc_id):
         }
 
         temp_signed_path = pdf_path + ".signed"
-        _stamp_signature_to_pdf(pdf_path, temp_signed_path, signature_data, user_name, audit_metadata=audit_metadata)
+        _stamp_signature_to_pdf(pdf_path, temp_signed_path, signature_data, user_name, audit_metadata=audit_metadata, is_party_b=False)
 
         # Replace original cached file
         shutil.move(temp_signed_path, pdf_path)
+
+        # Generate and append Audit Trail page
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
+        now_ist = datetime.now(ist_tz).strftime("%d-%b-%Y %I:%M %p IST")
+        party_a_metadata = {
+            "email": user_email,
+            "ip": ip_addr,
+            "user_agent": user_agent,
+            "time": now_ist
+        }
+        
+        party_b_name = doc.get("data", {}).get("party_b_name") or doc.get("data", {}).get("counterparty") or "Client Counterparty"
+
+        _append_or_update_audit_trail_page(
+            pdf_path,
+            doc_id=str(oid),
+            doc_type=doc.get("doc_type", "generic"),
+            summary=doc.get("summary", ""),
+            party_a_name=user_name,
+            party_a_metadata=party_a_metadata,
+            party_b_name=party_b_name,
+            party_b_metadata=None
+        )
 
         # Overwrite GCS version if available
         gcs_object_path = doc.get("gcs_object_path", "")
@@ -1739,7 +1943,9 @@ def api_sign_document(doc_id):
                 "signed": True,
                 "signed_at": now,
                 "validation_status": "verified",
-                "updated_at": now
+                "updated_at": now,
+                "party_a_signed_name": user_name,
+                "party_a_metadata": party_a_metadata
             }}
         )
 
@@ -1825,6 +2031,7 @@ def _send_pdf(pdf_path: str):
     )
     job_id = os.path.basename(os.path.dirname(pdf_path))
     response.headers["X-TradeDoc-File-Id"] = _file_id(job_id, filename)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return response
 
 
@@ -2137,6 +2344,504 @@ def api_get_validation_report(doc_id):
 # WORKFLOW EXECUTION / EMAIL SENDING ENDPOINT
 # ═══════════════════════════════════════════
 
+# ─────────────────────────────────────────────
+# CLIENT COUNTERSIGNATURE WORKFLOW ENDPOINTS
+# ─────────────────────────────────────────────
+
+@app.route("/api/documents/<doc_id>/send-to-client", methods=["POST"])
+@require_auth
+def api_send_to_client(doc_id):
+    """Generate secure link, draft countersign request via AI, and email signed PDF to client."""
+    try:
+        db = get_db()
+        oid = ObjectId(doc_id)
+        doc = db.documents.find_one({"_id": oid, "user_id": g.current_user_id})
+        if not doc:
+            return jsonify({"error": "Document not found"}), 404
+
+        body = _json_body()
+        client_email = body.get("client_email", "").strip()
+        custom_subject = body.get("subject", "").strip()
+        custom_body = body.get("email_body", "").strip()
+
+        if not client_email:
+            return jsonify({"error": "Missing client_email"}), 400
+
+        # Generate secure random token
+        import secrets
+        token = secrets.token_urlsafe(24)
+
+        # Update DB document with token and client email
+        db.documents.update_one(
+            {"_id": oid},
+            {"$set": {
+                "client_email": client_email,
+                "signing_token": token,
+                "signing_token_created_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+
+        # Get UI Origin to build sign link
+        origin = request.headers.get("Origin") or "http://localhost:3000"
+        sign_link = f"{origin}/public/sign?token={token}"
+
+        # Resolve PDF path
+        file_id = doc.get("pdf_file_id", "")
+        if not file_id:
+            return jsonify({"error": "PDF not generated for this document"}), 400
+
+        resolved_path, resolved_name = _resolve_generated_pdf({"pdf_file_id": file_id})
+        pdf_path = resolved_path
+
+        # If not cached locally, pull from GCS
+        if not pdf_path or not os.path.exists(pdf_path):
+            gcs_path = doc.get("gcs_object_path", "")
+            if gcs_path:
+                pdf_bytes = _download_from_gcs(gcs_path)
+                if pdf_bytes:
+                    user_id = g.current_user_id
+                    job_id = file_id.split(":", 1)[0] if ":" in file_id else "downloads"
+                    job_dir = os.path.join(TEMP_PDF_DIR, user_id, job_id)
+                    os.makedirs(job_dir, exist_ok=True)
+                    pdf_path = os.path.join(job_dir, resolved_name or "document.pdf")
+                    with open(pdf_path, "wb") as f:
+                        f.write(pdf_bytes)
+
+        if not pdf_path or not os.path.exists(pdf_path):
+            return jsonify({"error": "Signed PDF file not found"}), 404
+
+        # Draft email subject and body using AI if not provided
+        subject = custom_subject or f"Action Required: Trade Confirmation Countersignature — {doc.get('summary', '')}"
+        
+        if custom_body:
+            email_body = custom_body
+            if "[Signing Link]" in email_body:
+                email_body = email_body.replace("[Signing Link]", sign_link)
+            elif sign_link not in email_body:
+                email_body += f"\n\nSecure Link to Countersign: {sign_link}"
+        else:
+            # Call Groq to generate a professional email body requesting countersignature
+            groq_prompt = (
+                "You are an operations professional at a financial institution. "
+                "Draft a polite and highly professional email to a client asking them to countersign a trade confirmation document. "
+                "The email must contain the secure link for signing in a natural and clean way.\n"
+                f"Client Sign Link: {sign_link}\n"
+                f"Trade Summary: {doc.get('summary', '')}\n"
+                "Provide only the email body. Do not include subject lines or greetings like 'Subject:' or email metadata headers. "
+                "Start with a professional salutation and end with a signature block placeholder."
+            )
+            email_body = call_groq(groq_prompt, max_tokens=800, temperature=0.3)
+
+        # Resolve SMTP credentials
+        smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+        try:
+            smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        except ValueError:
+            smtp_port = 587
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_password = os.environ.get("SMTP_PASSWORD")
+        smtp_from_name = os.environ.get("SMTP_FROM_NAME", "TradeDoc AI Operations")
+
+        if not smtp_user or not smtp_password:
+            return jsonify({"error": "System SMTP credentials not configured in server environment"}), 400
+
+        # Build HTML multipart email
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.base import MIMEBase
+        from email import encoders
+
+        msg = MIMEMultipart("related")
+        msg["Subject"] = subject
+        msg["From"] = f"{smtp_from_name} <{smtp_user}>"
+        msg["To"] = client_email
+        msg["Reply-To"] = smtp_user
+
+        email_html_body = email_body.replace('\n', '<br>')
+        # Replace plain text URL with HTML link button
+        if sign_link in email_html_body:
+            email_html_body = email_html_body.replace(sign_link, f'<a href="{sign_link}" style="display:inline-block;background-color:#1e40af;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;margin:15px 0;">Click Here to Countersign</a>')
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body {{
+              font-family: 'Inter', -apple-system, sans-serif;
+              color: #334155;
+              background-color: #f8fafc;
+              margin: 0;
+              padding: 40px 20px;
+            }}
+            .card {{
+              max-width: 600px;
+              margin: 0 auto;
+              background-color: #ffffff;
+              border-radius: 12px;
+              border: 1px solid #e2e8f0;
+              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+              overflow: hidden;
+            }}
+            .header {{
+              background-color: #1e40af;
+              padding: 30px;
+              text-align: center;
+              color: #ffffff;
+            }}
+            .content {{
+              padding: 40px 30px;
+              line-height: 1.7;
+              font-size: 15px;
+            }}
+            .footer {{
+              padding: 20px 30px;
+              background-color: #f8fafc;
+              text-align: center;
+              font-size: 12px;
+              color: #64748b;
+              border-top: 1px solid #e2e8f0;
+            }}
+            .btn {{
+              display: inline-block;
+              background-color: #1e40af;
+              color: #ffffff !important;
+              padding: 12px 24px;
+              text-decoration: none;
+              border-radius: 6px;
+              font-weight: bold;
+              margin-top: 20px;
+            }}
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header">
+              <h2 style="margin:0;font-size:20px;letter-spacing:0.05em;">TRADEDOC AI</h2>
+            </div>
+            <div class="content">
+              {email_html_body}
+              <br><br>
+              <center>
+                <a class="btn" href="{sign_link}">Review & Sign Confirmation</a>
+              </center>
+            </div>
+            <div class="footer">
+              This email was generated securely by TradeDoc AI.<br>
+              Document ID: {doc_id}
+            </div>
+          </div>
+        </body>
+        </html>
+        """
+
+        msg.attach(MIMEText(html_content, "html"))
+
+        # Attach PDF
+        with open(pdf_path, "rb") as f:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(f.read())
+            encoders.encode_base64(part)
+            part.add_header(
+                "Content-Disposition",
+                f"attachment; filename={secure_filename(resolved_name or 'trade_confirmation.pdf')}",
+            )
+            msg.attach(part)
+
+        # Connect & Send
+        server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.sendmail(smtp_user, client_email, msg.as_string())
+        server.quit()
+
+        print(f"  ✉️  Countersignature request email sent to: {client_email}")
+        return jsonify({
+            "status": "success",
+            "message": f"Email successfully sent to {client_email}",
+            "signing_link": sign_link,
+            "email_body": email_body
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/public/documents/by-token", methods=["GET"])
+def api_get_document_by_token():
+    """Fetch document details for a public client using the secure token."""
+    try:
+        token = request.args.get("token", "").strip()
+        if not token:
+            return jsonify({"error": "Missing token"}), 400
+
+        db = get_db()
+        doc = db.documents.find_one({"signing_token": token})
+        if not doc:
+            return jsonify({"error": "Invalid or expired signing link"}), 404
+
+        # Return relevant metadata safely for the client screen
+        return jsonify({
+            "doc_id": str(doc["_id"]),
+            "doc_type": doc.get("doc_type"),
+            "summary": doc.get("summary"),
+            "data": doc.get("data", {}),
+            "party_a_signed_name": doc.get("party_a_signed_name"),
+            "party_a_metadata": doc.get("party_a_metadata"),
+            "client_signed": doc.get("client_signed", False),
+            "client_signed_name": doc.get("client_signed_name"),
+            "party_b_metadata": doc.get("party_b_metadata")
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/public/documents/by-token/pdf", methods=["GET"])
+def api_serve_pdf_by_token():
+    """Serve PDF document for a public client verification using the secure token."""
+    try:
+        token = request.args.get("token", "").strip()
+        if not token:
+            return jsonify({"error": "Missing token"}), 400
+
+        db = get_db()
+        doc = db.documents.find_one({"signing_token": token})
+        if not doc:
+            return jsonify({"error": "Invalid or expired signing link"}), 404
+
+        file_id = doc.get("pdf_file_id", "")
+        if not file_id:
+            return jsonify({"error": "No PDF file found for this document"}), 404
+
+        user_id = str(doc["user_id"])
+        resolved_path, resolved_name = _resolve_generated_pdf({"pdf_file_id": file_id}, user_id=user_id)
+        pdf_path = resolved_path
+
+        # If not cached locally, pull from GCS
+        if not pdf_path or not os.path.exists(pdf_path):
+            gcs_path = doc.get("gcs_object_path", "")
+            if gcs_path:
+                pdf_bytes = _download_from_gcs(gcs_path)
+                if pdf_bytes:
+                    job_id = file_id.split(":", 1)[0] if ":" in file_id else "downloads"
+                    job_dir = os.path.join(TEMP_PDF_DIR, user_id, job_id)
+                    os.makedirs(job_dir, exist_ok=True)
+                    pdf_path = os.path.join(job_dir, resolved_name or "document.pdf")
+                    with open(pdf_path, "wb") as f:
+                        f.write(pdf_bytes)
+
+        if not pdf_path or not os.path.exists(pdf_path):
+            return jsonify({"error": "PDF file not found"}), 404
+
+        response = send_file(
+            pdf_path,
+            mimetype="application/pdf",
+            as_attachment=False,
+            download_name=resolved_name or "trade_confirmation.pdf",
+        )
+        response.headers["X-TradeDoc-File-Id"] = file_id
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return response
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/public/documents/sign-by-token", methods=["POST"])
+def api_client_sign_document():
+    """Apply client signature and update PDF Audit Trail using the secure token."""
+    try:
+        body = _json_body()
+        token = body.get("token", "").strip()
+        signature_data = body.get("signature_data", "")
+        signer_name = body.get("signer_name", "").strip()
+
+        if not token or not signature_data or not signer_name:
+            return jsonify({"error": "Missing token, signature_data, or signer_name"}), 400
+
+        db = get_db()
+        doc = db.documents.find_one({"signing_token": token})
+        if not doc:
+            return jsonify({"error": "Invalid or expired signing link"}), 404
+
+        if doc.get("client_signed"):
+            return jsonify({"error": "Document has already been countersigned"}), 400
+
+        # Resolve PDF
+        file_id = doc.get("pdf_file_id", "")
+        user_id = str(doc["user_id"])
+        resolved_path, resolved_name = _resolve_generated_pdf({"pdf_file_id": file_id}, user_id=user_id)
+        pdf_path = resolved_path
+
+        # Pull from GCS if needed
+        if not pdf_path or not os.path.exists(pdf_path):
+            gcs_path = doc.get("gcs_object_path", "")
+            if gcs_path:
+                pdf_bytes = _download_from_gcs(gcs_path)
+                if pdf_bytes:
+                    job_id = file_id.split(":", 1)[0] if ":" in file_id else "downloads"
+                    job_dir = os.path.join(TEMP_PDF_DIR, user_id, job_id)
+                    os.makedirs(job_dir, exist_ok=True)
+                    pdf_path = os.path.join(job_dir, resolved_name or "document.pdf")
+                    with open(pdf_path, "wb") as f:
+                        f.write(pdf_bytes)
+
+        if not pdf_path or not os.path.exists(pdf_path):
+            return jsonify({"error": "Signed PDF file not found"}), 404
+
+        # Retrieve request metadata
+        ip_addr = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_addr and ',' in ip_addr:
+            ip_addr = ip_addr.split(',')[0].strip()
+        user_agent = request.headers.get('User-Agent', '')
+
+        ist_tz = timezone(timedelta(hours=5, minutes=30))
+        now_ist = datetime.now(ist_tz).strftime("%d-%b-%Y %I:%M %p IST")
+        party_b_metadata = {
+            "email": doc.get("client_email", ""),
+            "ip": ip_addr,
+            "user_agent": user_agent,
+            "time": now_ist
+        }
+
+        # Stamp signature on the right side for Party B
+        # NOTE: Audit trail page is NOT appended here — it will be generated
+        # only when the initiator verifies and releases the document.
+        temp_signed_path = pdf_path + ".signed"
+        _stamp_signature_to_pdf(pdf_path, temp_signed_path, signature_data, signer_name, audit_metadata=party_b_metadata, is_party_b=True)
+        shutil.move(temp_signed_path, pdf_path)
+
+        # Upload signed (but pre-release) PDF to GCS
+        gcs_object_path = doc.get("gcs_object_path", "")
+        if GCS_AVAILABLE and gcs_object_path:
+            _upload_to_gcs(pdf_path, str(doc["user_id"]), doc.get("doc_type", ""))
+
+        # Update DB document status
+        now = datetime.now(timezone.utc).isoformat()
+        db.documents.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {
+                "client_signed": True,
+                "client_signed_at": now,
+                "client_signed_name": signer_name,
+                "party_b_metadata": party_b_metadata,
+                "released": False,
+                "validation_status": "pending_verification",
+                "updated_at": now
+            }}
+        )
+
+        # Send acknowledgment email to the Client (Party B) only
+        smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+        try:
+            smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        except ValueError:
+            smtp_port = 587
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_password = os.environ.get("SMTP_PASSWORD")
+        smtp_from_name = os.environ.get("SMTP_FROM_NAME", "TradeDoc AI Operations")
+
+        if smtp_user and smtp_password and doc.get("client_email"):
+            client_email = doc.get("client_email")
+            try:
+                import smtplib
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
+
+                msg = MIMEMultipart("related")
+                msg["Subject"] = f"RECEIPT: Signature Captured — {doc.get('summary', '')}"
+                msg["From"] = f"{smtp_from_name} <{smtp_user}>"
+                msg["To"] = client_email
+
+                html_content = f"""
+                <!DOCTYPE html>
+                <html>
+                <head>
+                  <meta charset="utf-8">
+                  <style>
+                    body {{
+                      font-family: 'Inter', -apple-system, sans-serif;
+                      color: #334155;
+                      background-color: #f8fafc;
+                      margin: 0;
+                      padding: 40px 20px;
+                    }}
+                    .card {{
+                      max-width: 600px;
+                      margin: 0 auto;
+                      background-color: #ffffff;
+                      border-radius: 12px;
+                      border: 1px solid #e2e8f0;
+                      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+                      overflow: hidden;
+                    }}
+                    .header {{
+                      background-color: #3b82f6;
+                      padding: 30px;
+                      text-align: center;
+                      color: #ffffff;
+                    }}
+                    .content {{
+                      padding: 40px 30px;
+                      line-height: 1.7;
+                      font-size: 15px;
+                    }}
+                    .footer {{
+                      padding: 20px 30px;
+                      background-color: #f8fafc;
+                      text-align: center;
+                      font-size: 12px;
+                      color: #64748b;
+                      border-top: 1px solid #e2e8f0;
+                    }}
+                  </style>
+                </head>
+                <body>
+                  <div class="card">
+                    <div class="header">
+                      <h2 style="margin:0;font-size:20px;letter-spacing:0.05em;">SIGNATURE RECEIVED</h2>
+                    </div>
+                    <div class="content">
+                      <p>Dear Partner,</p>
+                      <p>We have successfully received your signature on the Trade Confirmation for <strong>{doc.get('summary', '')}</strong>.</p>
+                      <p>Our operations team is currently validating the details. We will reach you shortly with the fully executed document.</p>
+                      <p>Thank you for choosing TradeDoc AI.</p>
+                    </div>
+                    <div class="footer">
+                      This email was generated securely by TradeDoc AI.<br>
+                      Document ID: {doc["_id"]}
+                    </div>
+                  </div>
+                </body>
+                </html>
+                """
+
+                msg.attach(MIMEText(html_content, "html"))
+
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+                server.starttls()
+                server.login(smtp_user, smtp_password)
+                server.sendmail(smtp_user, client_email, msg.as_string())
+                server.quit()
+            except Exception as ex:
+                print(f"  ❌ Failed to send signature receipt email to {client_email}: {ex}")
+
+        return jsonify({
+            "status": "success",
+            "message": "Document successfully countersigned. Awaiting initiator verification."
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/workflow/execute", methods=["POST"])
 @require_auth
 def api_execute_workflow():
@@ -2148,6 +2853,11 @@ def api_execute_workflow():
         recipient_emails = body.get("recipients", [])
         pdf_file_id = body.get("pdf_file_id", "")
         pdf_filename = body.get("pdf_filename", "")
+        # Client details auto-filled from selected document
+        client_name = body.get("client_name", "").strip()
+        client_email = body.get("client_email", "").strip()
+        doc_summary = body.get("doc_summary", "").strip()
+        doc_type = body.get("doc_type", "").strip()
 
         custom_sender = body.get("custom_sender", {})
         
@@ -2249,13 +2959,44 @@ def api_execute_workflow():
                 pdf_display_name = resolved_name
         
         # 3. Call Groq to generate a professional email body
+        # Build a context block with known details so AI uses real names/values
+        known_context_lines = []
+        if client_name:
+            known_context_lines.append(f"Client Name (Party B): {client_name}")
+        if client_email:
+            known_context_lines.append(f"Client Email: {client_email}")
+        if doc_summary:
+            known_context_lines.append(f"Document: {doc_summary}")
+        if doc_type:
+            known_context_lines.append(f"Document Type: {doc_type.upper()}")
+        known_context = "\n".join(known_context_lines)
+
         groq_prompt = (
-            "You are a professional operations officer at a financial institution drafting a trade confirmation email. "
+            "You are a professional operations officer at a financial institution drafting a fully executed trade confirmation email. "
             f"Write a highly professional and polite email using the following instructions: '{prompt}'.\n"
-            f"Here is the context or source details of the trade/email:\n---\n{input_text}\n---\n"
-            "Generate only the email body. Make sure the email sounds polite, professional, and clear. Do not include subject lines in the output content itself, just the email body starting with a professional salutation and ending with a professional sign-off (leave placeholders for names if not known)."
+        )
+        if known_context:
+            groq_prompt += (
+                f"The following details are CONFIRMED and must be used exactly as provided — do NOT use placeholders for these:\n"
+                f"{known_context}\n\n"
+            )
+        groq_prompt += (
+            f"Here is the complete trade context and source details:\n---\n{input_text}\n---\n"
+            "Generate only the email body. The email must:\n"
+            "1. Use the confirmed client name above in the salutation (never write [Client's Name] or similar placeholders).\n"
+            "2. Reference the specific document name and trade details from the context.\n"
+            "3. Sound polite, professional, and clear.\n"
+            "4. End with a professional sign-off from 'TradeDoc Operations'.\n"
+            "Do not include a subject line — just the email body."
         )
         email_body = call_groq(groq_prompt, max_tokens=1000, temperature=0.3)
+
+        # Convert Groq's markdown output → clean HTML so **bold** renders properly in email
+        import markdown as md_lib
+        email_body_rendered = md_lib.markdown(
+            email_body,
+            extensions=['nl2br']  # nl2br turns newlines into <br> automatically
+        )
 
         # 4. Construct professional HTML Email and Send
         import smtplib
@@ -2274,14 +3015,16 @@ def api_execute_workflow():
             
             # Create message container
             msg = MIMEMultipart("related")
-            msg["Subject"] = f"Trade Confirmation Document: {(pdf_display_name or '').replace('.pdf', '')}"
+            # Use doc_summary for a more descriptive subject if available
+            subject_doc = doc_summary or (pdf_display_name or '').replace('.pdf', '')
+            msg["Subject"] = f"Fully Executed Trade Confirmation: {subject_doc}"
             msg["From"] = f"{smtp_from_name} <{smtp_user}>"
             msg["To"] = recipient
             if reply_to_email:
                 msg["Reply-To"] = reply_to_email
 
             # Build HTML body
-            email_body_html = email_body.replace('\n', '<br>')
+            email_body_html = email_body_rendered  # already markdown → HTML converted
             html_content = f"""
             <!DOCTYPE html>
             <html>
@@ -2358,7 +3101,7 @@ def api_execute_workflow():
                     <span style="font-size: 28px; vertical-align: middle;">📄</span>
                     <div style="display: inline-block; vertical-align: middle; margin-left: 8px;">
                       <strong style="color: #0f172a; font-size: 14px;">{pdf_display_name}</strong><br>
-                      <span style="color: #64748b; font-size: 12px;">Trade Confirmation PDF attached. Please review and sign.</span>
+                      <span style="color: #059669; font-size: 12px; font-weight: 600;">✓ Fully Executed — For your records</span>
                     </div>
                   </div>
                   ''' if pdf_path else ''}
@@ -2420,6 +3163,281 @@ def api_execute_workflow():
             "email_draft": email_body
         }), 200
 
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/workflow/pending-approvals", methods=["GET"])
+@require_auth
+def api_pending_approvals():
+    """Fetch all documents countersigned by client but not yet verified/released by initiator."""
+    try:
+        db = get_db()
+        docs = list(db.documents.find({
+            "user_id": g.current_user_id,
+            "client_signed": True,
+            "released": {"$ne": True}
+        }).sort("updated_at", -1))
+        
+        # Format object ids
+        return jsonify([_obj_id_to_str(d) for d in docs])
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/workflow/draft-release-email", methods=["POST"])
+@require_auth
+def api_draft_release_email():
+    """Use Groq to draft a personalized release email for the countersigned document."""
+    try:
+        body = _json_body()
+        doc_id = body.get("doc_id", "").strip()
+        if not doc_id:
+            return jsonify({"error": "Missing doc_id"}), 400
+
+        db = get_db()
+        doc = db.documents.find_one({"_id": ObjectId(doc_id), "user_id": g.current_user_id})
+        if not doc:
+            return jsonify({"error": "Document not found"}), 404
+
+        # Extract details for the prompt
+        summary = doc.get("summary", "Trade Confirmation")
+        doc_type = doc.get("doc_type", "generic").upper()
+        client_name = doc.get("client_signed_name") or doc.get("data", {}).get("party_b_name") or doc.get("data", {}).get("counterparty") or "Client Partner"
+        client_email = doc.get("client_email", "")
+        
+        # Build trade economics string to feed Groq
+        trade_details = ""
+        trade_data = doc.get("data", {})
+        if isinstance(trade_data, dict):
+            for k, v in trade_data.items():
+                if v and k not in ["pdf_file_id", "signing_token", "gcs_object_path", "schema"]:
+                    trade_details += f"- {k.replace('_', ' ').title()}: {v}\n"
+
+        prompt = f"""You are TradeDoc AI Operations Desk. Write a warm, professional, and personalized confirmation email to our client, {client_name} ({client_email}), verifying that both parties have successfully signed and executed the {doc_type} trade confirmation for: {summary}.
+
+Trade Details Context:
+{trade_details}
+
+Requirements:
+- Congratulate them on closing the trade.
+- Inform them that the fully executed trade confirmation, containing signatures from both parties and a secure audit trail certificate, is attached as a PDF.
+- State that the trade is now officially recorded and active in our systems.
+- The tone should be highly professional, polished, and friendly.
+- Keep the email concise and clean.
+- Return ONLY the drafted email body text. Do not include subject lines, markdown code blocks (like ```html), or placeholders.
+"""
+        from agents.groq_helper import call_groq
+        email_body = call_groq(prompt, max_tokens=600)
+
+        subject = f"EXECUTED & COMPLETED: Trade Confirmation — {summary}"
+        return jsonify({
+            "subject": subject,
+            "email_body": email_body
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/workflow/release-document", methods=["POST"])
+@require_auth
+def api_release_document():
+    """Approve the countersigned document and email the final executed PDF to both parties."""
+    try:
+        body = _json_body()
+        doc_id = body.get("doc_id", "").strip()
+        custom_subject = body.get("subject", "").strip()
+        custom_body = body.get("email_body", "").strip()
+
+        if not doc_id or not custom_subject or not custom_body:
+            return jsonify({"error": "Missing doc_id, subject, or email_body"}), 400
+
+        db = get_db()
+        doc = db.documents.find_one({"_id": ObjectId(doc_id), "user_id": g.current_user_id})
+        if not doc:
+            return jsonify({"error": "Document not found"}), 404
+
+        file_id = doc.get("pdf_file_id", "")
+        if not file_id:
+            return jsonify({"error": "No PDF file associated with this document"}), 404
+
+        # Resolve PDF path
+        user_id = str(doc["user_id"])
+        resolved_path, resolved_name = _resolve_generated_pdf({"pdf_file_id": file_id}, user_id=user_id)
+        pdf_path = resolved_path
+
+        # If not cached locally, pull from GCS
+        if not pdf_path or not os.path.exists(pdf_path):
+            gcs_path = doc.get("gcs_object_path", "")
+            if gcs_path:
+                pdf_bytes = _download_from_gcs(gcs_path)
+                if pdf_bytes:
+                    job_id = file_id.split(":", 1)[0] if ":" in file_id else "downloads"
+                    job_dir = os.path.join(TEMP_PDF_DIR, user_id, job_id)
+                    os.makedirs(job_dir, exist_ok=True)
+                    pdf_path = os.path.join(job_dir, resolved_name or "document.pdf")
+                    with open(pdf_path, "wb") as f:
+                        f.write(pdf_bytes)
+
+        if not pdf_path or not os.path.exists(pdf_path):
+            return jsonify({"error": "Signed PDF file not found"}), 404
+
+        # Fetch initiator and client emails
+        initiator = db.users.find_one({"_id": ObjectId(user_id)})
+        initiator_email = initiator.get("email") if initiator else None
+        client_email = doc.get("client_email")
+
+        # ── Generate Audit Certificate NOW (only at release/verify step) ──
+        # This is the correct moment: both signatures have been reviewed
+        # and the initiator has explicitly approved the document.
+        signer_name = doc.get("client_signed_name", "Authorized Representative")
+        party_b_metadata = doc.get("party_b_metadata", {})
+        _append_or_update_audit_trail_page(
+            pdf_path,
+            doc_id=str(doc["_id"]),
+            doc_type=doc.get("doc_type", "generic"),
+            summary=doc.get("summary", ""),
+            party_a_name=doc.get("party_a_signed_name", "Initiator"),
+            party_a_metadata=doc.get("party_a_metadata"),
+            party_b_name=signer_name,
+            party_b_metadata=party_b_metadata
+        )
+
+        # Upload the final PDF (with audit cert) to GCS
+        gcs_object_path = doc.get("gcs_object_path", "")
+        if GCS_AVAILABLE and gcs_object_path:
+            _upload_to_gcs(pdf_path, user_id, doc.get("doc_type", ""))
+
+        # Update DB document status: mark as fully executed and released
+        now = datetime.now(timezone.utc).isoformat()
+        db.documents.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {
+                "released": True,
+                "validation_status": "verified",
+                "updated_at": now
+            }}
+        )
+
+        # Send final execution email to BOTH parties (with audit cert in the attached PDF)
+        smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+        try:
+            smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        except ValueError:
+            smtp_port = 587
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_password = os.environ.get("SMTP_PASSWORD")
+        smtp_from_name = os.environ.get("SMTP_FROM_NAME", "TradeDoc AI Operations")
+
+        if smtp_user and smtp_password:
+            recipient_list = []
+            if client_email:
+                recipient_list.append(client_email)
+            if initiator_email:
+                recipient_list.append(initiator_email)
+
+            for rec in recipient_list:
+                try:
+                    import smtplib
+                    from email.mime.multipart import MIMEMultipart
+                    from email.mime.text import MIMEText
+                    from email.mime.base import MIMEBase
+                    from email import encoders
+
+                    msg = MIMEMultipart("related")
+                    msg["Subject"] = custom_subject
+                    msg["From"] = f"{smtp_from_name} <{smtp_user}>"
+                    msg["To"] = rec
+
+                    # Format HTML email body nicely
+                    formatted_body = custom_body.replace("\n", "<br>")
+                    html_content = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <meta charset="utf-8">
+                      <style>
+                        body {{
+                          font-family: 'Inter', -apple-system, sans-serif;
+                          color: #334155;
+                          background-color: #f8fafc;
+                          margin: 0;
+                          padding: 40px 20px;
+                        }}
+                        .card {{
+                          max-width: 600px;
+                          margin: 0 auto;
+                          background-color: #ffffff;
+                          border-radius: 12px;
+                          border: 1px solid #e2e8f0;
+                          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+                          overflow: hidden;
+                        }}
+                        .header {{
+                          background-color: #059669;
+                          padding: 30px;
+                          text-align: center;
+                          color: #ffffff;
+                        }}
+                        .content {{
+                          padding: 40px 30px;
+                          line-height: 1.7;
+                          font-size: 15px;
+                        }}
+                        .footer {{
+                          padding: 20px 30px;
+                          background-color: #f8fafc;
+                          text-align: center;
+                          font-size: 12px;
+                          color: #64748b;
+                          border-top: 1px solid #e2e8f0;
+                        }}
+                      </style>
+                    </head>
+                    <body>
+                      <div class="card">
+                        <div class="header">
+                          <h2 style="margin:0;font-size:20px;letter-spacing:0.05em;">COMPLETED & EXECUTED</h2>
+                        </div>
+                        <div class="content">
+                          <p>{formatted_body}</p>
+                        </div>
+                        <div class="footer">
+                          This email was generated securely by TradeDoc AI.<br>
+                          Document ID: {doc["_id"]}
+                        </div>
+                      </div>
+                    </body>
+                    </html>
+                    """
+
+                    msg.attach(MIMEText(html_content, "html"))
+
+                    with open(pdf_path, "rb") as f:
+                        part = MIMEBase("application", "octet-stream")
+                        part.set_payload(f.read())
+                        encoders.encode_base64(part)
+                        part.add_header(
+                            "Content-Disposition",
+                            f"attachment; filename=COMPLETED_{secure_filename(resolved_name or 'trade_confirmation.pdf')}",
+                        )
+                        msg.attach(part)
+
+                    server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+                    server.starttls()
+                    server.login(smtp_user, smtp_password)
+                    server.sendmail(smtp_user, rec, msg.as_string())
+                    server.quit()
+                except Exception as ex:
+                    print(f"  ❌ Failed to send final verification email to {rec}: {ex}")
+
+        return jsonify({
+            "status": "success",
+            "message": "Document successfully verified and released to both parties."
+        })
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500

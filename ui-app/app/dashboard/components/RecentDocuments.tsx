@@ -251,7 +251,11 @@ export default function RecentDocuments({ documents, onLoad, onView, onCreateNew
                             ? '#ea580c'
                             : (!doc.is_draft && doc.validation_status === 'pending')
                               ? '#d97706'
-                              : '#10b981'
+                              : doc.client_signed
+                                ? '#059669'
+                                : doc.signed
+                                  ? '#4f46e5'
+                                  : '#10b981'
                         }}
                       />
                       <span
@@ -261,14 +265,26 @@ export default function RecentDocuments({ documents, onLoad, onView, onCreateNew
                             ? '#ea580c'
                             : (!doc.is_draft && doc.validation_status === 'pending')
                               ? '#d97706'
-                              : '#10b981'
+                              : doc.client_signed && doc.released
+                                ? '#059669'
+                                : doc.client_signed
+                                  ? '#d97706'
+                                  : doc.signed
+                                    ? '#4f46e5'
+                                    : '#10b981'
                         }}
                       >
                         {doc.is_draft
                           ? 'In Progress'
                           : (!doc.is_draft && doc.validation_status === 'pending')
                             ? 'Pending Review'
-                            : 'Verified'}
+                            : doc.client_signed && doc.released
+                              ? 'Fully Executed'
+                              : doc.client_signed
+                                ? 'Signed – Pending Verification'
+                                : doc.signed
+                                  ? 'Signed (Pending Client)'
+                                  : 'Verified'}
                       </span>
                     </div>
                   </td>

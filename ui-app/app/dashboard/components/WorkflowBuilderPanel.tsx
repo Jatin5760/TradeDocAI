@@ -57,7 +57,7 @@ export default function WorkflowBuilderPanel({
       y: 40,
       data: {
         text: 'From: bank@ops.com\nTo: client@trade.com\nFX NDF Trade details:\nStrike: 82.40\nNotional: $1,000,000',
-        prompt: 'Draft a professional email summarizing the trade confirmation and requesting the client to sign and return the attached PDF.',
+        prompt: 'Draft a professional email confirming that the attached trade confirmation document has been fully executed by both parties. Inform the recipient that the signed copy is enclosed for their records.',
         pdf_file_id: '',
         pdf_filename: ''
       },
@@ -89,12 +89,152 @@ export default function WorkflowBuilderPanel({
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [executing, setExecuting] = useState(false);
   const [executionLogs, setExecutionLogs] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'canvas' | 'logs'>('canvas');
+  const [activeTab, setActiveTab] = useState<'canvas' | 'approvals' | 'logs'>('canvas');
+  const [pendingDocs, setPendingDocs] = useState<RecentDoc[]>([]);
+  const [selectedDoc, setSelectedDoc] = useState<RecentDoc | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [draftingEmail, setDraftingEmail] = useState(false);
+  const [releasing, setReleasing] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // --- Load nodes & links from localStorage on mount ---
+  const fetchPendingApprovals = async () => {
+    try {
+      const res = await fetch(`${apiBase}/api/workflow/pending-approvals`, {
+        headers: authHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingDocs(data);
+      }
+    } catch (e) {
+      console.error("Error fetching pending approvals:", e);
+    }
+  };
+
+  const fetchPdfBlob = async (docId: string) => {
+    try {
+      setPdfLoading(true);
+      setPdfError(null);
+      if (pdfBlobUrl) {
+        URL.revokeObjectURL(pdfBlobUrl);
+        setPdfBlobUrl(null);
+      }
+      const r = await fetch(`${apiBase}/api/documents/${docId}/pdf?t=${Date.now()}`, {
+        headers: authHeaders()
+      });
+      if (!r.ok) {
+        setPdfError('Failed to retrieve PDF from server.');
+        setPdfLoading(false);
+        return;
+      }
+      const contentType = r.headers.get('Content-Type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await r.json();
+        const signedUrl: string | undefined = data.signed_url;
+        if (!signedUrl) {
+          setPdfError('Signed URL not generated.');
+          setPdfLoading(false);
+          return;
+        }
+        const pdfResp = await fetch(signedUrl);
+        if (!pdfResp.ok) {
+          setPdfError('Failed to fetch from signed URL.');
+          setPdfLoading(false);
+          return;
+        }
+        const blob = await pdfResp.blob();
+        setPdfBlobUrl(URL.createObjectURL(blob));
+      } else {
+        const blob = await r.blob();
+        setPdfBlobUrl(URL.createObjectURL(blob));
+      }
+      setPdfLoading(false);
+    } catch (e) {
+      console.error(e);
+      setPdfError('An error occurred while fetching the PDF preview.');
+      setPdfLoading(false);
+    }
+  };
+
+  const handleSelectDoc = async (doc: RecentDoc) => {
+    setSelectedDoc(doc);
+    fetchPdfBlob(doc._id);
+    try {
+      setDraftingEmail(true);
+      const res = await fetch(`${apiBase}/api/workflow/draft-release-email`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ doc_id: doc._id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailSubject(data.subject || '');
+        setEmailBody(data.email_body || '');
+      } else {
+        onShowToast('⚠️ Failed to generate AI draft email. You can write your own below.');
+        setEmailSubject(`EXECUTED: Trade Confirmation — ${doc.summary}`);
+        setEmailBody(`Dear Client,\n\nPlease find attached the fully executed trade confirmation for ${doc.summary}.\n\nKind regards,\nTradeDoc Operations`);
+      }
+    } catch (e) {
+      console.error(e);
+      onShowToast('⚠️ Failed to contact draft generator.');
+    } finally {
+      setDraftingEmail(false);
+    }
+  };
+
+  const handleRelease = async () => {
+    if (!selectedDoc) return;
+    try {
+      setReleasing(true);
+      const res = await fetch(`${apiBase}/api/workflow/release-document`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          doc_id: selectedDoc._id,
+          subject: emailSubject,
+          email_body: emailBody,
+        }),
+      });
+      if (res.ok) {
+        onShowToast('🎉 Document successfully verified and released!');
+        const updatedList = pendingDocs.filter(d => d._id !== selectedDoc._id);
+        setPendingDocs(updatedList);
+        setSelectedDoc(null);
+        if (pdfBlobUrl) {
+          URL.revokeObjectURL(pdfBlobUrl);
+          setPdfBlobUrl(null);
+        }
+      } else {
+        const data = await res.json();
+        onShowToast(`❌ Error: ${data.error || 'Failed to release document'}`);
+      }
+    } catch (e) {
+      console.error(e);
+      onShowToast('❌ Failed to release document.');
+    } finally {
+      setReleasing(false);
+    }
+  };
+
+  // Revoke blob URL on cleanup
   useEffect(() => {
+    return () => {
+      if (pdfBlobUrl) {
+        URL.revokeObjectURL(pdfBlobUrl);
+      }
+    };
+  }, [pdfBlobUrl]);
+
+  // --- Load nodes & links from localStorage on mount & Fetch Pending Approvals ---
+  useEffect(() => {
+    fetchPendingApprovals();
+
     if (typeof window !== 'undefined') {
       const savedNodes = localStorage.getItem('td_workflow_nodes');
       const savedLinks = localStorage.getItem('td_workflow_links');
@@ -117,6 +257,13 @@ export default function WorkflowBuilderPanel({
         } catch (e) {
           console.error(e);
         }
+      }
+
+      // Check for tab routing
+      const targetTab = sessionStorage.getItem('workflow_builder_tab');
+      if (targetTab === 'approvals') {
+        setActiveTab('approvals');
+        sessionStorage.removeItem('workflow_builder_tab');
       }
     }
   }, []);
@@ -357,12 +504,22 @@ export default function WorkflowBuilderPanel({
       }
 
       // Prepare payload
+      // Find the selected doc from the PDF node to extract client details
+      const pdfDocId = (pdfNode?.data.pdf_file_id || draft.data.pdf_file_id || '');
+      const selectedPdfDoc = recentDocs.find(d =>
+        (d.data?.pdf_file_id as string) === pdfDocId || d._id === pdfDocId
+      );
       const payload: Record<string, unknown> = {
         input_text: draft.data.text || '',
         prompt: draft.data.prompt || '',
         recipients: recipients,
         pdf_file_id: resolvedPdfFileId,
         pdf_filename: resolvedPdfFilename,
+        // Pass client details so Groq can use real names instead of placeholders
+        client_name: selectedPdfDoc?.client_signed_name || '',
+        client_email: selectedPdfDoc?.client_email || '',
+        doc_summary: selectedPdfDoc?.summary || '',
+        doc_type: selectedPdfDoc?.doc_type || '',
       };
 
       // Add custom sender credentials if connected
@@ -524,6 +681,17 @@ export default function WorkflowBuilderPanel({
               Canvas
             </button>
             <button
+              onClick={() => setActiveTab('approvals')}
+              className={`relative px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 ${activeTab === 'approvals' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'} flex items-center gap-1`}
+            >
+              Approvals & Releases
+              {pendingDocs.length > 0 && (
+                <span className="w-4 h-4 rounded-full bg-rose-500 text-white font-bold text-[9px] flex items-center justify-center shadow-sm">
+                  {pendingDocs.length}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setActiveTab('logs')}
               className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all duration-300 ${activeTab === 'logs' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500'}`}
             >
@@ -531,40 +699,44 @@ export default function WorkflowBuilderPanel({
             </button>
           </div>
 
-          {/* Reset Layout button */}
-          <button
-            onClick={() => {
-              localStorage.removeItem('td_workflow_nodes');
-              localStorage.removeItem('td_workflow_links');
-              setNodes(DEFAULT_NODES);
-              setLinks(DEFAULT_LINKS);
-              onShowToast('🔄 Layout reset to default');
-            }}
-            className="px-3.5 py-2 rounded-xl text-slate-500 hover:text-slate-700 font-bold text-xs border border-slate-200 bg-white hover:bg-slate-50 transition-all flex items-center gap-1.5"
-            title="Reset node layout to default positions"
-          >
-            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-            Reset Layout
-          </button>
+          {/* Reset Layout + Run Workflow — only relevant on Canvas tab */}
+          {activeTab !== 'approvals' && (
+            <>
+              <button
+                onClick={() => {
+                  localStorage.removeItem('td_workflow_nodes');
+                  localStorage.removeItem('td_workflow_links');
+                  setNodes(DEFAULT_NODES);
+                  setLinks(DEFAULT_LINKS);
+                  onShowToast('🔄 Layout reset to default');
+                }}
+                className="px-3.5 py-2 rounded-xl text-slate-500 hover:text-slate-700 font-bold text-xs border border-slate-200 bg-white hover:bg-slate-50 transition-all flex items-center gap-1.5"
+                title="Reset node layout to default positions"
+              >
+                <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Reset Layout
+              </button>
 
-          <button
-            onClick={runWorkflow}
-            disabled={executing}
-            className="px-5 py-2.5 rounded-xl text-white font-bold text-[13px] flex items-center gap-1.5 transition-all shadow-md bg-primary hover:bg-indigo-700 disabled:opacity-50"
-            style={{ boxShadow: '0 8px 20px rgba(79, 70, 229, 0.25)' }}
-          >
-            {executing ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Executing...
-              </>
-            ) : (
-              <>
-                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
-                Run Workflow
-              </>
-            )}
-          </button>
+              <button
+                onClick={runWorkflow}
+                disabled={executing}
+                className="px-5 py-2.5 rounded-xl text-white font-bold text-[13px] flex items-center gap-1.5 transition-all shadow-md bg-primary hover:bg-indigo-700 disabled:opacity-50"
+                style={{ boxShadow: '0 8px 20px rgba(79, 70, 229, 0.25)' }}
+              >
+                {executing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Executing...
+                  </>
+                ) : (
+                  <>
+                    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+                    Run Workflow
+                  </>
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -777,26 +949,81 @@ export default function WorkflowBuilderPanel({
                     )}
 
                     {node.type === 'pdf' && (() => {
-                      // Only show PDFs that are fully signed — not just verified or in-progress
-                      const signedDocs = recentDocs.filter(d => !d.is_draft && d.signed === true);
+                      // Only show PDFs that are FULLY EXECUTED — both parties signed
+                      // AND the initiator has verified & released. Half-signed docs excluded.
+                      const releasedDocs = recentDocs.filter(d => !d.is_draft && d.released === true);
                       return (
                         <div className="flex flex-col gap-2">
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Select Signed PDF</label>
-                          {signedDocs.length === 0 ? (
-                            <div className="flex flex-col items-center gap-2 py-4 text-center">
-                              <svg width="28" height="28" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="text-slate-300"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                              <p className="text-[11px] text-slate-400 font-medium">No signed PDFs found.<br/>Sign a document first before sending.</p>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Select Fully Executed PDF</label>
+                          {releasedDocs.length === 0 ? (
+                            <div className="flex flex-col items-center gap-2 py-5 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                              <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center">
+                                <svg width="18" height="18" fill="none" stroke="#f59e0b" viewBox="0 0 24 24" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                              </div>
+                              <div>
+                                <p className="text-[11px] text-slate-600 font-bold">No fully executed PDFs yet</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">A document must be signed by both parties<br/>and verified by you before it can be sent.</p>
+                              </div>
                             </div>
                           ) : (
                             <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-0.5">
-                              {signedDocs.map(doc => {
+                              {releasedDocs.map(doc => {
                                 const isSelected = node.data.pdf_file_id === (doc.data?.pdf_file_id as string || doc._id);
                                 return (
                                   <button
                                     key={doc._id}
                                     onClick={() => {
-                                      updateNodeData(node.id, 'pdf_file_id', doc.data?.pdf_file_id as string || doc._id || '');
-                                      updateNodeData(node.id, 'pdf_filename', doc.summary || 'trade_confirmation.pdf');
+                                      const fileId = doc.data?.pdf_file_id as string || doc._id || '';
+                                      const filename = doc.summary || 'trade_confirmation.pdf';
+
+                                      // 1. Update this PDF node
+                                      updateNodeData(node.id, 'pdf_file_id', fileId);
+                                      updateNodeData(node.id, 'pdf_filename', filename);
+
+                                      // 2. Build auto-fill text from doc details
+                                      const tradeData = doc.data || {};
+                                      const lines: string[] = [];
+                                      lines.push(`Document: ${doc.summary || 'Trade Confirmation'}`);
+                                      lines.push(`Type: ${doc.doc_type || 'N/A'}`);
+                                      lines.push(`Date: ${new Date(doc.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`);
+                                      lines.push('');
+                                      lines.push('--- Trade Details ---');
+                                      // Dump all key-value pairs from the document's data object
+                                      Object.entries(tradeData).forEach(([k, v]) => {
+                                        if (k === 'pdf_file_id' || !v) return;
+                                        const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                                        lines.push(`${label}: ${v}`);
+                                      });
+                                      lines.push('');
+                                      lines.push('--- Parties ---');
+                                      if (doc.client_signed_name) lines.push(`Client (Party B): ${doc.client_signed_name}`);
+                                      if (doc.client_email) lines.push(`Client Email: ${doc.client_email}`);
+                                      if (doc.party_b_metadata?.time) lines.push(`Client Signed At: ${doc.party_b_metadata.time}`);
+                                      const autoText = lines.join('\n');
+
+                                      // 3. Find linked draft node(s) and auto-fill their text
+                                      setNodes(prev => {
+                                        // Find draft nodes connected FROM this pdf node
+                                        const connectedDraftIds = links
+                                          .filter(l => l.from === node.id)
+                                          .map(l => l.to);
+                                        // Also find recipient nodes connected from any draft
+                                        const connectedRecipientIds = links
+                                          .filter(l => connectedDraftIds.includes(l.from))
+                                          .map(l => l.to);
+
+                                        return prev.map(n => {
+                                          if (connectedDraftIds.includes(n.id) && n.type === 'draft') {
+                                            return { ...n, data: { ...n.data, text: autoText } };
+                                          }
+                                          if (connectedRecipientIds.includes(n.id) && n.type === 'recipient' && doc.client_email) {
+                                            return { ...n, data: { ...n.data, email: doc.client_email } };
+                                          }
+                                          return n;
+                                        });
+                                      });
+
+                                      onShowToast('✅ Document details auto-filled into draft');
                                     }}
                                     className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all duration-150 flex items-start gap-2.5 ${
                                       isSelected
@@ -818,8 +1045,8 @@ export default function WorkflowBuilderPanel({
                                         isSelected ? 'text-indigo-700' : 'text-slate-700'
                                       }`}>{doc.summary || 'Untitled Document'}</p>
                                       <div className="flex items-center gap-1 mt-0.5">
-                                        <svg width="9" height="9" fill="none" stroke="#10b981" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
-                                        <span className="text-[9px] font-semibold text-emerald-600 uppercase tracking-wide">Signed</span>
+                                        <svg width="9" height="9" fill="none" stroke="#059669" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <span className="text-[9px] font-semibold text-emerald-700 uppercase tracking-wide">Fully Executed</span>
                                       </div>
                                     </div>
                                   </button>
@@ -864,6 +1091,258 @@ export default function WorkflowBuilderPanel({
               ))}
             </div>
           </>
+        ) : activeTab === 'approvals' ? (
+          /* Approvals & Releases Workspace */
+          <div className="flex-1 flex flex-col lg:flex-row h-full overflow-hidden bg-slate-50">
+            {/* Left Sidebar: Pending List */}
+            <div className="lg:w-[350px] w-full border-r border-slate-200/80 bg-white flex flex-col shrink-0 h-full">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm font-inter">Pending Verification</h3>
+                  <p className="text-[11px] text-slate-400 font-medium">Awaiting final initiator release</p>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                  {pendingDocs.length} docs
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {pendingDocs.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center py-10 px-4">
+                    <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg mb-3 border border-emerald-100 shadow-sm animate-pulse">
+                      ✓
+                    </div>
+                    <h4 className="text-xs font-bold text-slate-700">All Caught Up!</h4>
+                    <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">
+                      No signed documents are pending verification at this moment.
+                    </p>
+                  </div>
+                ) : (
+                  pendingDocs.map((doc) => {
+                    const isSelected = selectedDoc?._id === doc._id;
+                    const dateStr = doc.client_signed_at 
+                      ? new Date(doc.client_signed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      : 'Recently';
+                    
+                    return (
+                      <button
+                        key={doc._id}
+                        onClick={() => handleSelectDoc(doc)}
+                        className={`w-full text-left p-3.5 rounded-2xl border transition-all duration-300 relative flex gap-3 cursor-pointer hover:bg-slate-50 ${
+                          isSelected 
+                            ? 'bg-indigo-50/40 border-indigo-200 shadow-sm ring-1 ring-indigo-200/50' 
+                            : 'bg-white border-slate-200/80 shadow-sm'
+                        }`}
+                      >
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 ${
+                          isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          📄
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-wider bg-indigo-50 px-1.5 py-0.5 rounded-md">
+                              {(doc.doc_type || 'TRADE').toUpperCase()}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {dateStr}
+                            </span>
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-800 truncate mb-0.5">
+                            {doc.summary || 'Trade Confirmation'}
+                          </h4>
+                          <p className="text-[11px] text-slate-500 truncate font-medium">
+                            Client: {doc.client_signed_name || doc.client_email || 'Party B'}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Right Panel: Verification Details & Action */}
+            <div className="flex-1 overflow-y-auto flex flex-col h-full bg-slate-50">
+              {!selectedDoc ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 max-w-md mx-auto h-full">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-700 shadow-lg shadow-indigo-200 flex items-center justify-center mb-5 border border-indigo-500/30">
+                    <img src="/logo-light.svg" alt="TradeDoc AI" className="w-9 h-9 object-contain" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-800 text-base font-inter">Client Approvals Center</h3>
+                  <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+                    Select a client-signed document from the sidebar list to run the operations gate, inspect credentials, and verify before final release.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-6 space-y-6 flex flex-col lg:flex-row gap-6 min-h-full">
+                  {/* Left Column: Form & Metadata */}
+                  <div className="flex-1 space-y-6 min-w-0">
+                    {/* Header Details */}
+                    <div>
+                      <div className="flex items-center gap-2.5 mb-1.5">
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                          Pending Release Gate
+                        </span>
+                        <span className="text-xs text-slate-400 font-medium">ID: {selectedDoc._id}</span>
+                      </div>
+                      <h2 className="text-lg font-black text-slate-800 font-inter leading-tight">
+                        {selectedDoc.summary || 'Trade Confirmation'}
+                      </h2>
+                    </div>
+
+                    {/* Metadata Card */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-4">
+                      <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                        <span className="text-sm">🛡️</span>
+                        <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Client Sign Audit Trail</h4>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Client Signee</label>
+                          <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">
+                            {selectedDoc.client_signed_name || 'Counterparty Rep'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Client Email</label>
+                          <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">
+                            {selectedDoc.client_email || 'Not specified'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">IP Address</label>
+                          <p className="text-xs font-bold text-slate-700 mt-0.5 truncate font-mono">
+                            {selectedDoc.party_b_metadata?.ip || 'Unknown'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signature Date (IST)</label>
+                          <p className="text-xs font-bold text-slate-700 mt-0.5 truncate">
+                            {selectedDoc.party_b_metadata?.time || 'Pending timestamp'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Signer Agent/Browser</label>
+                        <p className="text-[11px] text-slate-500 font-medium mt-0.5 break-words line-clamp-2" title={selectedDoc.party_b_metadata?.user_agent}>
+                          {selectedDoc.party_b_metadata?.user_agent || 'Unknown browser'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Email Editor Card */}
+                    <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">🤖</span>
+                          <div>
+                            <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">AI Release Email Draft</h4>
+                            <p className="text-[10px] text-slate-400 font-medium">Groq Operations Desk Agent</p>
+                          </div>
+                        </div>
+                        {draftingEmail && (
+                          <div className="flex items-center gap-1.5 text-xs text-indigo-600 font-semibold animate-pulse">
+                            <div className="w-3.5 h-3.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                            Drafting...
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-3.5">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Subject Line</label>
+                          <input
+                            type="text"
+                            value={emailSubject}
+                            onChange={(e) => setEmailSubject(e.target.value)}
+                            disabled={draftingEmail}
+                            className="w-full mt-1 px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-medium"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email Message Body</label>
+                          <textarea
+                            rows={8}
+                            value={emailBody}
+                            onChange={(e) => setEmailBody(e.target.value)}
+                            disabled={draftingEmail}
+                            className="w-full mt-1 px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-medium leading-relaxed font-sans"
+                            style={{ resize: 'vertical' }}
+                          />
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={handleRelease}
+                        disabled={releasing || draftingEmail}
+                        className="w-full py-3 px-4 rounded-xl text-white font-bold text-xs bg-emerald-600 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
+                      >
+                        {releasing ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Releasing & Sending Executed Copy...
+                          </>
+                        ) : (
+                          <>
+                            <span>✓</span>
+                            <span>Verify & Release Executed Trade</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right Column: PDF Viewer */}
+                  <div className="lg:w-[480px] xl:w-[540px] w-full shrink-0 flex flex-col h-[650px] bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs">📄</span>
+                        <h4 className="text-xs font-bold text-slate-700">Executed PDF Contract Preview</h4>
+                      </div>
+                      {pdfBlobUrl && (
+                        <a
+                          href={pdfBlobUrl}
+                          download={`${selectedDoc.summary.toLowerCase().replace(/\s+/g, '_')}_executed.pdf`}
+                          className="px-2.5 py-1 text-[10px] bg-white border border-slate-200 text-slate-600 hover:text-slate-800 rounded-lg font-bold shadow-sm transition-colors cursor-pointer"
+                        >
+                          Download
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex-1 bg-slate-100 flex items-center justify-center relative h-full">
+                      {pdfLoading && (
+                        <div className="flex flex-col items-center gap-2 animate-pulse">
+                          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs text-slate-500 font-bold">Rendering Document...</span>
+                        </div>
+                      )}
+                      {pdfError && (
+                        <div className="p-4 text-center max-w-xs">
+                          <p className="text-xs text-rose-500 font-bold mb-2">{pdfError}</p>
+                          <button
+                            onClick={() => fetchPdfBlob(selectedDoc._id)}
+                            className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 hover:text-slate-800 text-xs font-bold rounded-lg transition-colors shadow-sm cursor-pointer"
+                          >
+                            Retry Loading
+                          </button>
+                        </div>
+                      )}
+                      {!pdfLoading && !pdfError && pdfBlobUrl && (
+                        <iframe
+                          src={`${pdfBlobUrl}#toolbar=0`}
+                          title="Final Executed Agreement Preview"
+                          className="w-full h-full border-0"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           /* Logs Panel View (Light Theme) */
           <div className="flex-1 p-6 flex flex-col h-full bg-slate-50 font-mono text-slate-700 overflow-y-auto border border-slate-200/80 rounded-2xl shadow-inner">

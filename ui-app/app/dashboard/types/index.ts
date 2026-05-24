@@ -60,6 +60,17 @@ export interface RecentDoc {
   source_email?: string;
   gcs_object_path?: string;
   signed?: boolean;
+  client_signed?: boolean;
+  released?: boolean;
+  client_signed_at?: string;
+  client_signed_name?: string;
+  client_email?: string;
+  party_b_metadata?: {
+    email?: string;
+    ip?: string;
+    user_agent?: string;
+    time?: string;
+  };
 }
 
 export type AppPage = 'landing' | 'analytics' | 'ai' | 'form' | 'pdf' | 'settings' | 'my-documents' | 'workflow-builder';

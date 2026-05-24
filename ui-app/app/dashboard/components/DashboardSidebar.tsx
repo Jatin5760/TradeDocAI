@@ -13,6 +13,7 @@ interface SidebarProps {
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
   hidden?: boolean;
+  pendingApprovalsCount?: number;
 }
 
 const NAV_GROUPS = [
@@ -57,7 +58,7 @@ const NAV_GROUPS = [
   }
 ];
 
-export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPage, activePage, isMobileOpen = false, onCloseMobile, hidden = false }: SidebarProps) {
+export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPage, activePage, isMobileOpen = false, onCloseMobile, hidden = false, pendingApprovalsCount = 0 }: SidebarProps) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [mounted, setMounted] = useState(false);
   
@@ -91,14 +92,16 @@ export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPa
           boxShadow: '2px 0 12px rgba(0,0,0,0.02)',
         }}
       >
-        {/* Branding */}
-        <div className="px-5 sm:px-7 pt-6 sm:pt-8 pb-6 sm:pb-8 flex items-center gap-3 cursor-pointer" onClick={() => { onGoHome(); onCloseMobile?.(); }}>
-          <div className="relative w-8 h-8 shrink-0">
-            <Image src="/logo.svg" alt="TradeDoc AI Logo" fill className="object-contain" priority />
+        {/* Branding & Notifications */}
+        <div className="px-5 sm:px-7 pt-6 sm:pt-8 pb-6 sm:pb-8 flex items-center justify-between">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => { onGoHome(); onCloseMobile?.(); }}>
+            <div className="relative w-8 h-8 shrink-0">
+              <Image src="/logo.svg" alt="TradeDoc AI Logo" fill className="object-contain" priority />
+            </div>
+            <span style={{ fontFamily: "var(--font-inter)", fontWeight: 800, fontSize: '19px', color: 'var(--text-secondary)', letterSpacing: '-0.04em' }}>
+              TradeDoc<span style={{ color: 'var(--primary)' }}>AI</span>
+            </span>
           </div>
-          <span style={{ fontFamily: "var(--font-inter)", fontWeight: 800, fontSize: '19px', color: 'var(--text-secondary)', letterSpacing: '-0.04em' }}>
-            TradeDoc<span style={{ color: 'var(--primary)' }}>AI</span>
-          </span>
         </div>
 
         {/* Navigation Groups */}
@@ -136,6 +139,11 @@ export default function DashboardSidebar({ userName, onLogout, onGoHome, onSetPa
                       }}>
                         {item.label}
                       </span>
+                      {item.page === 'workflow-builder' && pendingApprovalsCount > 0 && (
+                        <span className="ml-auto px-2 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-black shadow-sm shrink-0">
+                          {pendingApprovalsCount}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

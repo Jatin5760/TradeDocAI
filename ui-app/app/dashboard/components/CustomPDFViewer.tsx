@@ -27,6 +27,8 @@ interface CustomPDFViewerProps {
   showValidateOnPdf?: boolean;
   onSigned?: () => void;
   initialIsSigned?: boolean;
+  initialIsClientSigned?: boolean;
+  initialIsReleased?: boolean;
 }
 
 export default function CustomPDFViewer({
@@ -46,6 +48,8 @@ export default function CustomPDFViewer({
   showValidateOnPdf,
   onSigned,
   initialIsSigned,
+  initialIsClientSigned,
+  initialIsReleased,
 }: CustomPDFViewerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
@@ -54,6 +58,8 @@ export default function CustomPDFViewer({
   // Signature States
   const [localPdfUrl, setLocalPdfUrl] = useState(pdfUrl);
   const [isSigned, setIsSigned] = useState(initialIsSigned || false);
+  const [isClientSigned, setIsClientSigned] = useState(initialIsClientSigned || false);
+  const [isReleased, setIsReleased] = useState(initialIsReleased || false);
   const [isSigningModalOpen, setIsSigningModalOpen] = useState(false);
   const [isConfirmSignOpen, setIsConfirmSignOpen] = useState(false);
   const [signatureType, setSignatureType] = useState<'draw' | 'type'>('draw');
@@ -63,6 +69,13 @@ export default function CustomPDFViewer({
   const [isDrawing, setIsDrawing] = useState(false);
   const [toast, setToast] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+
+  // Client Email States
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [clientEmail, setClientEmail] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -74,6 +87,11 @@ export default function CustomPDFViewer({
   useEffect(() => {
     setIsSigned(initialIsSigned || false);
   }, [initialIsSigned]);
+
+  useEffect(() => {
+    setIsClientSigned(initialIsClientSigned || false);
+    setIsReleased(initialIsReleased || false);
+  }, [initialIsClientSigned, initialIsReleased]);
 
   // Load cursive fonts dynamically
   useEffect(() => {
@@ -234,10 +252,59 @@ export default function CustomPDFViewer({
       showToastMsg('✅ Document Signed successfully!');
       setIsSigningModalOpen(false);
       if (onSigned) onSigned();
+
+      // Fetch details and open Email Modal
+      setIsEmailModalOpen(true);
+      try {
+        const docResp = await fetch(`${API_BASE}/api/documents/${docId}`, { headers: authHeaders() });
+        if (docResp.ok) {
+          const docData = await docResp.json();
+          const clientEmailData = docData.client_email || docData.data?.party_b_email || '';
+          setClientEmail(clientEmailData);
+          setEmailSubject(`Action Required: Trade Confirmation Countersignature — ${docData.summary || ''}`);
+          const clientName = docData.data?.party_b_name || docData.data?.counterparty || 'Partner';
+          setEmailBody(`Dear ${clientName},\n\nWe have reviewed and signed the Trade Confirmation (attached).\n\nPlease review and countersign the document at your earliest convenience.\n\nBest regards,\nOperations Desk`);
+        }
+      } catch (e) {
+        console.error("Failed to load doc details for email draft:", e);
+      }
     } catch {
       showToastMsg('❌ Failed to sign document');
     } finally {
       setIsSigningApiLoading(false);
+    }
+  };
+
+  const sendEmailToClient = async () => {
+    if (!clientEmail.trim()) {
+      showToastMsg('❌ Please enter client email');
+      return;
+    }
+    setIsSendingEmail(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/documents/${docId}/send-to-client`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          client_email: clientEmail,
+          subject: emailSubject,
+          email_body: emailBody
+        }),
+      });
+      if (!response.ok) {
+        let errorMsg = 'Failed to send email';
+        try {
+          const errData = await response.json();
+          errorMsg = errData.error || errorMsg;
+        } catch {}
+        throw new Error(errorMsg);
+      }
+      showToastMsg('✉️ Email sent successfully to client!');
+      setIsEmailModalOpen(false);
+    } catch (e: any) {
+      showToastMsg(e.message || '❌ Failed to send email');
+    } finally {
+      setIsSendingEmail(false);
     }
   };
 
@@ -403,17 +470,57 @@ export default function CustomPDFViewer({
 
             {/* Button 2: Sign Document */}
             {docId && (
-              isSigned ? (
+              isClientSigned ? (
                 <button
                   disabled
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-not-allowed"
-                  title="Document is signed"
+                  className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-not-allowed ${
+                    isReleased
+                      ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                      : 'bg-amber-50 border border-amber-200 text-amber-700'
+                  }`}
+                  title={isReleased ? 'Document is fully executed' : 'Client signed – awaiting your verification'}
                 >
                   <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
                   </svg>
-                  <span>Signed</span>
+                  <span>{isReleased ? 'Fully Executed' : 'Signed – Pending Verification'}</span>
                 </button>
+              ) : isSigned ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled
+                    className="px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 text-xs sm:text-sm font-bold flex items-center gap-1.5 cursor-not-allowed"
+                    title="Document is signed"
+                  >
+                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    <span>Signed</span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setIsEmailModalOpen(true);
+                      try {
+                        const docResp = await fetch(`${API_BASE}/api/documents/${docId}`, { headers: authHeaders() });
+                        if (docResp.ok) {
+                          const docData = await docResp.json();
+                          const clientEmailData = docData.client_email || docData.data?.party_b_email || '';
+                          setClientEmail(clientEmailData);
+                          setEmailSubject(`Action Required: Trade Confirmation Countersignature — ${docData.summary || ''}`);
+                          const clientName = docData.data?.party_b_name || docData.data?.counterparty || 'Partner';
+                          setEmailBody(`Dear ${clientName},\n\nWe have reviewed and signed the Trade Confirmation (attached).\n\nPlease review and countersign the document at your earliest convenience.\n\nBest regards,\nOperations Desk`);
+                        }
+                      } catch (e) {
+                        console.error("Failed to load doc details for email draft:", e);
+                      }
+                    }}
+                    className="px-3 py-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-600 text-xs sm:text-sm font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm whitespace-nowrap cursor-pointer flex items-center gap-1.5"
+                    title="Email signed document to client for countersignature"
+                  >
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    Email Client
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => {
@@ -674,6 +781,95 @@ export default function CustomPDFViewer({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
                   </svg>
                   <span>Yes, Proceed to Sign</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Email Client Modal ── */}
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[95] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-scale-in">
+            {/* Modal Header */}
+            <div className="p-6 bg-gradient-to-r from-indigo-50 to-indigo-100/50 border-b border-indigo-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                  Email Signed Document to Client
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">Send secure link to client for countersignature</p>
+              </div>
+              <button 
+                onClick={() => setIsEmailModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center transition-colors border border-slate-100 shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Client Email Address</label>
+                <input
+                  type="email"
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  placeholder="e.g. client@bank.com"
+                  className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:bg-white transition-all shadow-inner"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Email Subject</label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Email Subject"
+                  className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-semibold focus:outline-none focus:border-indigo-400 focus:bg-white transition-all shadow-inner"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Email Message Body (AI Drafted)</label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  rows={6}
+                  placeholder="Email Message Body..."
+                  className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm font-medium focus:outline-none focus:border-indigo-400 focus:bg-white transition-all shadow-inner resize-none"
+                />
+                <span className="text-[10px] text-slate-400 italic">
+                  Note: A secure single-use signing link will be automatically appended to this email.
+                </span>
+              </div>
+
+              {/* Modal Footer Controls */}
+              <div className="flex items-center justify-end gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsEmailModalOpen(false)}
+                  className="px-4 py-2 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors shadow-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={sendEmailToClient}
+                  disabled={isSendingEmail}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700 transition-colors shadow-md shadow-indigo-100 flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSendingEmail ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Email'
+                  )}
                 </button>
               </div>
             </div>

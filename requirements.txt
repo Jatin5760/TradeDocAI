@@ -36,3 +36,5 @@ pypdf>=5.0.0
 reportlab>=4.1.0
 pillow>=10.3.0
 
+# ── Markdown → HTML (for AI email rendering) ─
+markdown>=3.6
