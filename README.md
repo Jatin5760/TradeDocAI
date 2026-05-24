@@ -1,50 +1,9 @@
-<div align="center">
-  <svg viewBox="0 0 800 100" width="100%" height="100" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="shimmer" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#4f46e5">
-          <animate attributeName="stop-color" values="#4f46e5; #3b82f6; #ec4899; #8b5cf6; #10b981; #4f46e5" dur="6s" repeatCount="indefinite" />
-        </stop>
-        <stop offset="25%" stop-color="#3b82f6">
-          <animate attributeName="stop-color" values="#3b82f6; #ec4899; #8b5cf6; #10b981; #4f46e5; #3b82f6" dur="6s" repeatCount="indefinite" />
-        </stop>
-        <stop offset="50%" stop-color="#ec4899">
-          <animate attributeName="stop-color" values="#ec4899; #8b5cf6; #10b981; #4f46e5; #3b82f6; #ec4899" dur="6s" repeatCount="indefinite" />
-        </stop>
-        <stop offset="75%" stop-color="#8b5cf6">
-          <animate attributeName="stop-color" values="#8b5cf6; #10b981; #4f46e5; #3b82f6; #ec4899; #8b5cf6" dur="6s" repeatCount="indefinite" />
-        </stop>
-        <stop offset="100%" stop-color="#10b981">
-          <animate attributeName="stop-color" values="#10b981; #4f46e5; #3b82f6; #ec4899; #8b5cf6; #10b981" dur="6s" repeatCount="indefinite" />
-        </stop>
-      </linearGradient>
-    </defs>
-    <style>
-      .svg-text {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-        font-size: 72px;
-        font-weight: 800;
-        letter-spacing: -2px;
-        fill: url(#shimmer);
-      }
-    </style>
-    <text x="50%" y="75" text-anchor="middle" class="svg-text">
-      <tspan opacity="0">T<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.1s" fill="freeze"/></tspan>
-      <tspan opacity="0">r<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.18s" fill="freeze"/></tspan>
-      <tspan opacity="0">a<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.26s" fill="freeze"/></tspan>
-      <tspan opacity="0">d<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.34s" fill="freeze"/></tspan>
-      <tspan opacity="0">e<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.42s" fill="freeze"/></tspan>
-      <tspan opacity="0">D<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.5s" fill="freeze"/></tspan>
-      <tspan opacity="0">o<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.58s" fill="freeze"/></tspan>
-      <tspan opacity="0">c<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.66s" fill="freeze"/></tspan>
-      <tspan opacity="0">A<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.74s" fill="freeze"/></tspan>
-      <tspan opacity="0">I<animate attributeName="opacity" from="0" to="1" dur="0.4s" begin="0.82s" fill="freeze"/></tspan>
-    </text>
-  </svg>
-  <h3 style="color: #64748b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-weight: 600; margin-top: -10px; margin-bottom: 25px; border: none;">
-    Enterprise Derivative Trade Automation & Verification
-  </h3>
-</div>
+<p align="center">
+  <img src="header.svg" alt="TradeDocAI" width="600" />
+</p>
+<p align="center" style="font-size: 1.2rem; color: #64748b; font-weight: 600; margin-top: -15px; margin-bottom: 30px;">
+  Enterprise Derivative Trade Automation & Verification
+</p>
 
 <p align="center">
   TradeDocAI is a modern, AI-powered document generation and validation platform designed to streamline institutional OTC derivative operations. It automates classification, data extraction, validation, PDF generation, and client e-signing of complex trade agreements (including <strong>FX Non-Deliverable Forwards</strong>, <strong>Interest Rate Swaps</strong>, <strong>Credit Default Swaps</strong>, and <strong>Equity Total Return Swaps</strong>).
