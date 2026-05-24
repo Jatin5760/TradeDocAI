@@ -1,92 +1,13 @@
-<!-- Styles for the animated title (supported in modern Markdown previews and browsers) -->
-<style>
-  @keyframes textShimmer {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
-  @keyframes letterReveal {
-    0% { opacity: 0; transform: translateY(15px); }
-    100% { opacity: 1; transform: translateY(0); }
-  }
-  
-  .readme-title {
-    display: inline-flex;
-    justify-content: center;
-    gap: 1px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 3.5rem;
-    font-weight: 800;
-    letter-spacing: -0.04em;
-    background: linear-gradient(135deg, #4f46e5, #3b82f6, #ec4899, #8b5cf6, #10b981);
-    background-size: 300% 300%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    color: transparent;
-    animation: textShimmer 8s ease infinite;
-    line-height: 1.2;
-    margin: 15px 0 5px 0;
-  }
-  
-  .readme-subtitle {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 1.35rem;
-    font-weight: 600;
-    color: #334155;
-    margin-top: 5px;
-    text-align: center;
-  }
-  
-  .letter {
-    display: inline-block;
-    opacity: 0;
-    animation: letterReveal 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-  .l-0 { animation-delay: 0.1s; }
-  .l-1 { animation-delay: 0.18s; }
-  .l-2 { animation-delay: 0.26s; }
-  .l-3 { animation-delay: 0.34s; }
-  .l-4 { animation-delay: 0.42s; }
-  .l-5 { animation-delay: 0.5s; }
-  .l-6 { animation-delay: 0.58s; }
-  .l-7 { animation-delay: 0.66s; }
-  .l-8 { animation-delay: 0.74s; }
-  .l-9 { animation-delay: 0.82s; }
-</style>
-
-<div align="center" style="margin-bottom: 25px;">
-  <!-- Centered Logo/Banner -->
-  <img src="tradedoc_email_banner.png" alt="TradeDocAI Logo" width="100%" style="max-width: 580px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.06);" />
-  
-  <br />
-  
-  <!-- Centered Title with animatable letter elements -->
-  <div class="readme-title">
-    <span class="letter l-0">T</span>
-    <span class="letter l-1">r</span>
-    <span class="letter l-2">a</span>
-    <span class="letter l-3">d</span>
-    <span class="letter l-4">e</span>
-    <span class="letter l-5">D</span>
-    <span class="letter l-6">o</span>
-    <span class="letter l-7">c</span>
-    <span class="letter l-8">A</span>
-    <span class="letter l-9">I</span>
-  </div>
-  
-  <!-- Subtitle -->
-  <div class="readme-subtitle">
-    Enterprise Derivative Trade Automation & Verification
-  </div>
+<div align="center">
+  <h1>TradeDocAI</h1>
 </div>
 
-<p align="center" style="font-size: 1.05rem; color: #475569; max-width: 750px; margin: 0 auto 25px auto; text-align: center; line-height: 1.6;">
-  TradeDocAI is a modern, AI-powered document generation and validation platform designed to streamline institutional OTC derivative operations. It automates classification, data extraction, validation, PDF generation, and client e-signing of complex trade agreements (including **FX Non-Deliverable Forwards**, **Interest Rate Swaps**, **Credit Default Swaps**, and **Equity Total Return Swaps**).
+<p align="center">
+  TradeDocAI is a modern, AI-powered document generation and validation platform designed to streamline institutional OTC derivative operations. It automates classification, data extraction, validation, PDF generation, and client e-signing of complex trade agreements (including <strong>FX Non-Deliverable Forwards</strong>, <strong>Interest Rate Swaps</strong>, <strong>Credit Default Swaps</strong>, and <strong>Equity Total Return Swaps</strong>).
 </p>
 
-<p align="center" style="font-size: 1.05rem; color: #475569; max-width: 750px; margin: 0 auto 30px auto; text-align: center; line-height: 1.6;">
-  By orchestrating specialized agents using a **LangGraph** pipeline with a **React/Next.js** frontend, **Flask** backend, and a precise **LaTeX** PDF engine, TradeDocAI transforms unstructured emails into signed, validated trade confirmations in seconds.
+<p align="center">
+  By orchestrating specialized agents using a <strong>LangGraph</strong> pipeline with a <strong>React/Next.js</strong> frontend, <strong>Flask</strong> backend, and a precise <strong>LaTeX</strong> PDF engine, TradeDocAI transforms unstructured emails into signed, validated trade confirmations in seconds.
 </p>
 
 ---
